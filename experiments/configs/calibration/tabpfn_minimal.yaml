@@ -1,0 +1,94 @@
+# Calibration Experiment: TabPFN with Minimal Preprocessing
+# Tests calibration with minimal preprocessing
+
+experiment:
+  type: "within_county"
+  name: "calibration_tabpfn_minimal"
+  description: "TabPFN calibration with minimal preprocessing"
+  repetitions: 10
+  random_seed: 42
+  n_jobs: 4
+
+# Data paths
+data:
+  county_csvs_dir: "/scratch/users/salilg/property_tax/county_csvs/"
+  county_metadata_file: "/home/users/salilg/tabpfn_data_scarcity/county_row_counts.csv"
+  target_column: "SALE_AMOUNT"
+
+# County bins
+county_bins:
+  - name: "small"
+    min_size: 10
+    max_size: 100
+    k_folds: 5
+
+# Minimal preprocessing
+preprocessing:
+  features:
+    property_chars: true
+    census_bg: false
+    census_tract: false
+    assessed_value: false
+    geographic: false
+    temporal: false
+
+  steps:
+    drop_null_labels: true
+    drop_single_value_cols: false
+    drop_mostly_null_cols: false
+    share_non_null: 0.0
+    drop_lowest_ratios: false
+    drop_repeat_sales: false
+    clean_bad_columns: false
+    generate_temporal_features: false
+    one_hot_encode: false
+    winsorize: false
+    winsorize_percentile: 0
+    log_transform_target: false
+    normalize_continuous: false
+    impute_method: "none"
+
+# Models - TabPFN only
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: false
+
+# XGBoost config
+
+# TabPFN configuration
+tabpfn:
+  version: "v2"  # Options: "v2", "v2.5"
+  device: "cuda"   # Options: "cuda", "cpu"
+xgboost:
+  optuna_trials: 50
+  optuna_cv_folds: 3
+  use_gpu: true
+
+# Metrics
+metrics:
+  - r2
+  - mae
+  - rmse
+
+# Logging
+logging:
+  level: "INFO"
+  save_fold_level_results: true
+  log_hyperparameters: true
+
+# Predictions
+predictions:
+  save_predictions: false
+  predictions_format: "parquet"
+
+# Calibration - ENABLED
+calibration:
+  enabled: true
+  quantiles: [0.1, 0.25, 0.5, 0.75, 0.9]
+  models: ["tabpfn"]
+
+# Output
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/calibration/calibration_tabpfn_minimal/"

@@ -1,0 +1,132 @@
+# Fine-tuning Smoke Test Configuration
+#
+# Minimal configuration for debugging and validation before running full experiment
+# Uses 10 tiny counties for quick testing (~2-5 minutes)
+
+# ==============================================================================
+# EXPERIMENT METADATA
+# ==============================================================================
+experiment:
+  type: "finetuning"
+  name: "tabpfn_finetuning_smoke"
+  description: "SMOKE TEST: Fine-tune TabPFN on minimal data for validation"
+  random_seed: 42
+
+# ==============================================================================
+# DATA (Pre-generated cleaned datasets)
+# ==============================================================================
+data:
+  cleaned_data_path: "/scratch/users/salilg/property_tax/preprocessed/v1_no_onehot/"
+  target_column: "SALE_AMOUNT"
+
+# ==============================================================================
+# SPLITS (Pre-generated - RECOMMENDED FOR SMOKE TEST)
+# ==============================================================================
+# Use existing pre-generated splits to avoid loading 50GB data.parquet
+splits:
+  test_set_dir: "/scratch/users/salilg/property_tax/preprocessed/v1_no_onehot/test_v1/"
+  train_set_dir: "/scratch/users/salilg/property_tax/preprocessed/v1_no_onehot/test_v1/train_v1/"
+
+# Alternative: Generate splits on-the-fly (requires 50GB+ memory)
+# test_set_config: "experiments/configs/test_sets/test_smoke.yaml"
+# train_set_config: "experiments/configs/train_sets/train_smoke.yaml"
+
+# ==============================================================================
+# PREPROCESSING (Phase 2)
+# ==============================================================================
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+# ==============================================================================
+# TABPFN FINE-TUNING CONFIGURATION (MINIMAL FOR SMOKE TEST)
+# ==============================================================================
+# ==============================================================================
+# TABPFN FINE-TUNING CONFIGURATION (v2 - Minimal for smoke test)
+# ==============================================================================
+finetuning:
+  implementation: "v2"
+  val_fraction: 0.2
+  learning_rate: 1e-4
+  n_lr_warmup_epochs: 0
+  weight_decay: 0.0
+  max_epochs: 2                   # Just 2 epochs for smoke test
+  batch_size: 1
+  epoch_size: 5                   # Reduced for smoke test
+  seq_len_pred: 512               # Reduced for smoke test
+  gradient_clip: 1.0
+  patience: 2                     # Reduced patience
+  finetune_mode: "full"
+  target_transform: null
+  softmax_temperature: 0.9
+  use_amp: true
+  eval_batch_size: 500            # Smaller for smoke test
+  checkpoint_path: null
+# ==============================================================================
+# XGBOOST CONFIGURATION (MINIMAL FOR SMOKE TEST)
+# ==============================================================================
+xgboost:
+  optuna_trials: 2                # Just 2 trials for smoke test
+  optuna_cv_folds: 2              # Reduced CV folds
+  use_gpu: true
+
+# ==============================================================================
+# TABPFN CONFIGURATION
+# ==============================================================================
+tabpfn:
+  version: "v2"  # Options: "v2", "v2.5"
+  device: "cuda"   # Options: "cuda", "cpu"
+
+# ==============================================================================
+# MODELS
+# ==============================================================================
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: true
+
+# ==============================================================================
+# EVALUATION
+# ==============================================================================
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+evaluation:
+  stratify_by_size_bucket: true
+
+# ==============================================================================
+# OUTPUT
+# ==============================================================================
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/finetuning/smoke_test/"
+
+# ==============================================================================
+# DEBUG (For smoke test only - limits data size)
+# ==============================================================================
+debug:
+  sample_size: 1000  # Only use first 1000 rows from each split (test and train)
+
+# ==============================================================================
+# LOGGING
+# ==============================================================================
+logging:
+  level: "INFO"
+  save_split_info: true
+  save_per_county_results: false
+
+# ==============================================================================
+# PREDICTIONS & CALIBRATION
+# ==============================================================================
+predictions:
+  save_predictions: false
+  predictions_format: "parquet"
+
+calibration:
+  enabled: false

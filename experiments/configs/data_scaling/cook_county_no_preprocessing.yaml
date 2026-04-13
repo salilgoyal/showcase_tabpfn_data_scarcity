@@ -1,0 +1,104 @@
+# Data Scaling Experiment: Cook County (No Preprocessing)
+# Tests TabPFN with minimal/no preprocessing
+
+experiment:
+  type: "data_scaling"
+  name: "cook_county_no_preprocessing"
+  description: "Cook County learning curves with no preprocessing"
+  repetitions: 10
+  random_seed: 42
+  n_jobs: 4
+
+# Data configuration
+data:
+  cook_county_csv: "data/cook_county.csv"
+  target_column: "SALE_AMOUNT"
+  cbg_column: "block_group_id"
+
+# Training sizes to test
+train_sizes: [50, 100, 200, 500, 1000, 2000, 5000]
+
+# Random seeds for sampling
+seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+# Minimal preprocessing
+preprocessing:
+  features:
+    property_chars: true
+    census_bg: false
+    census_tract: false
+    assessed_value: false
+    geographic: false
+    temporal: false  # No temporal features
+
+  steps:
+    # Minimal cleaning
+    drop_null_labels: true
+    drop_single_value_cols: false
+    drop_mostly_null_cols: false
+    share_non_null: 0.0
+    drop_lowest_ratios: false
+    drop_repeat_sales: false
+    clean_bad_columns: false
+
+    # No feature engineering
+    generate_temporal_features: false
+    one_hot_encode: false
+
+    # No outlier handling
+    winsorize: false
+    winsorize_percentile: 0
+
+    # No transformations
+    log_transform_target: false
+
+    # No scaling
+    normalize_continuous: false
+
+    # No imputation
+    impute_method: "none"
+
+# Models to evaluate
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: true  # Optional
+
+# XGBoost hyperparameter tuning
+xgboost:
+  optuna_trials: 50
+  optuna_cv_folds: 3
+  use_gpu: true
+
+# TabPFN configuration
+tabpfn:
+  version: "v2"  # Options: "v2", "v2.5"
+  device: "cuda"   # Options: "cuda", "cpu"
+
+# Evaluation metrics
+metrics:
+  - r2
+  - mae
+  - rmse
+
+# Logging
+logging:
+  level: "INFO"
+  save_fold_level_results: true
+  log_hyperparameters: true
+
+# Predictions storage
+predictions:
+  save_predictions: false
+  predictions_format: "parquet"
+
+# Calibration
+calibration:
+  enabled: false
+  quantiles: [0.1, 0.25, 0.5, 0.75, 0.9]
+  models: ["tabpfn"]
+
+# Output
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/data_scaling/cook_county_no_preprocessing/"

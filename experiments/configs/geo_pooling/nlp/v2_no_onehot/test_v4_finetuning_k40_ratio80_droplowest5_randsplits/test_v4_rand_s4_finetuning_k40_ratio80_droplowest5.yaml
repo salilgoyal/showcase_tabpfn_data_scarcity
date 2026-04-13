@@ -1,0 +1,89 @@
+# Geographic Pooling + TabPFN Finetuning (NLP cluster): random split seed 4
+#
+# Identical to test_v4_finetuning_k40_ratio80_droplowest5.yaml but uses
+# random-split test set seed 4. Run s0-s4 to measure variability.
+#
+# Usage (NLP cluster):
+#   sbatch --array=0-3 experiments/slurm/nlp/geo_pooling_finetune.sh \
+#     experiments/configs/geo_pooling/nlp/v2_no_onehot/test_v4_finetuning_k40_ratio80_droplowest5_randsplits/test_v4_rand_s4_finetuning_k40_ratio80_droplowest5.yaml
+
+experiment:
+  type: "geo_pooling"
+  name: "test_v4_rand_s4_geo_k40_ratio80_droplowest5_finetuned"
+  description: "Per-county TabPFN finetuning with geo pooling, random split seed 4, k=40, ratio=0.8, drop lowest 5%"
+  random_seed: 42
+
+data:
+  cleaned_data_path: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/"
+  target_column: "SALE_AMOUNT"
+  project_root: "/sailhome/salilg/tabpfn_data_scarcity"
+
+splits:
+  test_set_dir: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/test_v4_rand_s4/"
+
+geo_pooling:
+  centroids_csv: "data/us_county_latlng.csv"
+  max_k_neighbors: 40
+  max_distance_miles: null
+  neighbor_budget_ratio: 0.8
+  max_samples_per_neighbor: null
+  max_total_training_size: 10000
+  restrict_neighbors_to_same_size_bucket: false
+
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+ratio_filter:
+  enabled: true
+  drop_bottom_percentile: 5
+  drop_top_percentile: 0
+  by_sale_year: true
+
+models:
+  - name: "tabpfn"
+    enabled: false
+  - name: "xgboost"
+    enabled: false
+  - name: "tabpfn_finetuned"
+    enabled: true
+
+finetuning:
+  learning_rate: 1e-4
+  weight_decay: 0.0
+  max_epochs: 50
+  patience: 8
+  epoch_size: 10
+  seq_len_pred: 128
+  max_context_size: null
+  batch_size: 1
+  gradient_clip: 1.0
+  use_amp: true
+  val_fraction: 0.2
+  finetune_mode: "full"
+  target_transform: null
+  softmax_temperature: 0.9
+  checkpoint_path: null
+  eval_batch_size: 4096
+  device: "cuda"
+  min_train_size: 20
+
+checkpointing:
+  enabled: true
+  interval: 10
+  resume: true
+
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+output:
+  results_dir: "/nlp/scr/salilg/property_tax/results/geo_pooling/v2_no_onehot/test_v4_rand_s4_geo_k40_ratio80_droplowest5_finetuned/"
+
+logging:
+  level: "INFO"

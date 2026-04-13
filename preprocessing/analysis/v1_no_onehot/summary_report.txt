@@ -1,0 +1,77 @@
+================================================================================
+PREPROCESSED DATA ANALYSIS REPORT
+================================================================================
+
+OVERALL STATISTICS
+--------------------------------------------------------------------------------
+Total rows: 17,904,828
+Total columns: 123
+Total counties: 2667
+Memory usage: 19.03 GB
+
+Preprocessing info:
+  Version: v1_no_onehot
+  Target log-transformed: True
+  Categorical handling: label_encode
+
+COUNTY-LEVEL STATISTICS
+--------------------------------------------------------------------------------
+Counties: 2667
+Rows per county:
+  Min: 1
+  Max: 406,208
+  Mean: 6713
+  Median: 1811
+
+Target statistics (log-transformed):
+  Mean across counties: 11.919
+  Std across counties: 0.760
+
+FEATURE OVERLAP ANALYSIS
+--------------------------------------------------------------------------------
+Total features: 120
+Common features (in all counties): 70
+
+Feature coverage distribution:
+  100% coverage: 70 features
+   90%+ coverage: 114 features
+   50%+ coverage: 120 features
+   <50% coverage: 0 features
+
+Least common features (bottom 10):
+  census_med_rent_tract: 2654 counties (99.5%)
+  census_med_rent_bg: 2650 counties (99.4%)
+  TAX_YEAR: 2648 counties (99.3%)
+  TOTAL_TAX_AMOUNT: 2648 counties (99.3%)
+  char_yrblt: 2362 counties (88.6%)
+  char_bldg_sf: 2336 counties (87.6%)
+  char_gar1_sf: 2131 counties (79.9%)
+  char_stories: 2066 counties (77.5%)
+  char_fbath: 2016 counties (75.6%)
+  char_beds: 1885 counties (70.7%)
+
+FEATURE TYPE SUMMARY
+--------------------------------------------------------------------------------
+Data types:
+  int64: 62 features
+  float64: 51 features
+  int32: 5 features
+  object: 2 features
+
+Feature categories:
+  unknown: 55 features
+  binary: 31 features
+  continuous: 29 features
+  categorical: 5 features
+
+Features with >10% nulls: 7
+Top 10 features with highest null percentage:
+  char_gar1_sf: 47.8% nulls
+  char_beds: 39.7% nulls
+  census_med_rent_bg: 32.5% nulls
+  char_fbath: 28.0% nulls
+  char_stories: 24.2% nulls
+  char_yrblt: 14.6% nulls
+  char_bldg_sf: 14.0% nulls
+
+================================================================================

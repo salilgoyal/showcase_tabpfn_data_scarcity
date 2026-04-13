@@ -1,0 +1,78 @@
+# Geographic Pooling Experiment: test_v4, all counties (tiny + small + medium)
+#
+# For each test county (any size bucket):
+#   - Use all of the county's own historical data
+#   - Add neighbor data: 0.8x the county's own training size, from nearest counties
+#   - Neighbors can come from any bucket
+#   - Train per-county TabPFN + XGBoost models
+
+experiment:
+  type: "geo_pooling"
+  name: "test_v4_geo_k1K_ratio10K_droplowest5"
+  description: "Per-county geo pooling on all counties, max_k_neighbors=1K, neighbor_ratio=10K, drop lowest 5% of counties"
+  random_seed: 42
+
+data:
+  cleaned_data_path: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/"
+  target_column: "SALE_AMOUNT"
+  project_root: "/sailhome/salilg/tabpfn_data_scarcity"
+
+splits:
+  test_set_dir: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/"
+
+# No filter_buckets: defaults to tiny + small + medium
+
+geo_pooling:
+  centroids_csv: "data/us_county_latlng.csv"
+  max_k_neighbors: 1000 
+  max_distance_miles: null
+  neighbor_budget_ratio: 10000.0
+  max_samples_per_neighbor: null
+  max_total_training_size: 10000  # Cap on own + neighbor combined (e.g. 10000 for TabPFN limit)
+  restrict_neighbors_to_same_size_bucket: false  # If true, only pool from counties in the same size bucket
+
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+ratio_filter:
+  enabled: true
+  drop_bottom_percentile: 5   # drop bottom 5% of MARKET_TOTAL_VALUE / exp(SALE_AMOUNT)
+  drop_top_percentile: 0      # can also trim the top if needed
+  by_sale_year: true          # compute percentiles within each sale year (recommended)
+
+
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: true
+
+xgboost:
+  optuna_trials: 50
+  optuna_cv_folds: 3
+  use_gpu: true
+
+tabpfn:
+  version: "v2"
+  device: "cuda"
+
+checkpointing:
+  enabled: true
+  interval: 10
+  resume: true
+
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+output:
+  results_dir: "/nlp/scr/salilg/property_tax/results/geo_pooling/v2_no_onehot/test_v4_geo_k1K_ratio10K_droplowest5/"
+
+logging:
+  level: "INFO"

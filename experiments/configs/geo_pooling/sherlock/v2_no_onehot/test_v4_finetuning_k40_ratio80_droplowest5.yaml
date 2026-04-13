@@ -1,0 +1,108 @@
+# Geographic Pooling + TabPFN Finetuning (Sherlock): test_v4
+#
+# Per-county finetuning: for each test county, finetune TabPFN on
+# own historical data + geo-pooled neighbor data (k=40, ratio=0.8).
+#
+# Uses test_v4 split (stratified). Ratio filter drops lowest 5% by
+# MARKET_TOTAL_VALUE / SALE_AMOUNT ratio within each sale year.
+#
+# Only tabpfn_finetuned is enabled — run tabpfn and xgboost separately
+# using the existing geo_pooling configs.
+#
+# Usage (Sherlock):
+#   sbatch --array=0-3 experiments/slurm/sherlock/geo_pooling_finetune.sh \
+#     experiments/configs/geo_pooling/sherlock/v2_no_onehot/test_v4_finetuning_k40_ratio80_droplowest5.yaml
+
+experiment:
+  type: "geo_pooling"
+  name: "test_v4_geo_k40_ratio80_droplowest5_finetuned"
+  description: "Per-county TabPFN finetuning with geo pooling, k=40, ratio=0.8, drop lowest 5%"
+  random_seed: 42
+
+data:
+  cleaned_data_path: "/scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/"
+  target_column: "SALE_AMOUNT"
+  project_root: "/home/users/salilg/tabpfn_data_scarcity"
+
+splits:
+  test_set_dir: "/scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/"
+
+geo_pooling:
+  centroids_csv: "data/us_county_latlng.csv"
+  max_k_neighbors: 40
+  max_distance_miles: null
+  neighbor_budget_ratio: 0.8
+  max_samples_per_neighbor: null
+  max_total_training_size: 10000
+  restrict_neighbors_to_same_size_bucket: false
+
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+ratio_filter:
+  enabled: true
+  drop_bottom_percentile: 5
+  drop_top_percentile: 0
+  by_sale_year: true
+
+models:
+  - name: "tabpfn"
+    enabled: false
+  - name: "xgboost"
+    enabled: false
+  - name: "tabpfn_finetuned"
+    enabled: true
+
+# ==============================================================================
+# TABPFN FINETUNING CONFIGURATION
+# ==============================================================================
+finetuning:
+  # Training
+  learning_rate: 1e-4
+  weight_decay: 0.0
+  max_epochs: 50
+  patience: 8                    # Shorter than global finetuning: counties are small
+  epoch_size: 10
+  seq_len_pred: 128              # Query samples per step
+  max_context_size: null         # null = use all training samples (fits for small counties)
+  batch_size: 1
+  gradient_clip: 1.0
+  use_amp: true
+
+  # Val split (used when no external val set provided, i.e. always in geo pooling)
+  # Seed is taken from experiment.random_seed for reproducibility across runs
+  val_fraction: 0.2
+
+  # Model
+  finetune_mode: "full"
+  target_transform: null
+  softmax_temperature: 0.9
+  checkpoint_path: null          # Auto-download TabPFN v2 checkpoint
+
+  # Inference
+  eval_batch_size: 4096
+  device: "cuda"
+
+  # Min training size to attempt finetuning (counties below this are skipped)
+  min_train_size: 20
+
+checkpointing:
+  enabled: true
+  interval: 10
+  resume: true
+
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/geo_pooling/v2_no_onehot/test_v4_geo_k40_ratio80_droplowest5_finetuned/"
+
+logging:
+  level: "INFO"

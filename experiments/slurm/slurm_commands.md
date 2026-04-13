@@ -1,0 +1,1 @@
+sbatch experiments/slurm/cross_county.sh experiments/configs/cross_county/small_in_context_10k.yaml

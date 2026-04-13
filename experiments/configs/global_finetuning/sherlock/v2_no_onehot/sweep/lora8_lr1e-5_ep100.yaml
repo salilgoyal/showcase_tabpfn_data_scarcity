@@ -1,0 +1,55 @@
+experiment:
+  type: global_finetuning
+  name: ft_sweep_lora8_lr1e-5_ep100
+  description: Global TabPFN finetuning with per-county task batching
+  random_seed: 42
+data:
+  cleaned_data_path: /scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/
+  target_column: SALE_AMOUNT
+  project_root: /home/users/salilg/tabpfn_data_scarcity
+global_finetuning:
+  variant: internal
+  n_samples: 999999
+  sampling_strategy: uniform
+splits:
+  test_set_dir: /scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: median
+ratio_filter:
+  enabled: true
+  drop_bottom_percentile: 5
+  drop_top_percentile: 0
+  by_sale_year: true
+finetuning:
+  learning_rate: 1.0e-05
+  weight_decay: 0.0
+  max_epochs: 200
+  patience: 30
+  epoch_size: 100
+  seq_len_pred: 1024
+  batch_size: 1
+  gradient_clip: 1.0
+  use_amp: true
+  finetune_mode: lora
+  target_transform: null
+  checkpoint_path: null
+  softmax_temperature: 0.9
+  val_fraction: 0.2
+  eval_batch_size: 4096
+  device: cuda
+  training_mode: per_county
+  min_county_size: 5
+  context_fraction_range:
+  - 0.3
+  - 0.7
+  lora_rank: 8
+  lora_alpha: 8.0
+output:
+  checkpoint_dir: /scratch/users/salilg/property_tax/results/global_finetuning/v2_no_onehot/sweep/lora8_lr1e-5_ep100/
+  results_dir: /scratch/users/salilg/property_tax/results/global_finetuning/v2_no_onehot/sweep/lora8_lr1e-5_ep100/
+logging:
+  level: INFO

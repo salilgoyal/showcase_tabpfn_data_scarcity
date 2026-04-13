@@ -1,0 +1,23 @@
+# Configuration for Within-County Experiment (Experiment 1)
+
+# Inherits from base_config.yaml
+
+# Nested CV settings
+nested_cv:
+  enabled: true
+  tune_per_fold: true  # Run Optuna for each outer fold
+
+# Output settings
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/within_county"
+  save_intermediate: true  # Save after each county completes
+
+# SLURM parallelization
+# Each array task processes one county
+slurm:
+  max_parallel_jobs: 10  # Can be overridden at runtime
+  time_per_job: "4:00:00"  # 4 hours per county
+  mem_per_job: "32G"
+  cpus_per_task: 8
+  gpu_per_task: 1
+  partition: "deho"  # Sherlock partition

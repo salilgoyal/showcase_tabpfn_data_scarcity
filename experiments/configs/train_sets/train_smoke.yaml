@@ -1,0 +1,29 @@
+# Train Set: Smoke Test (Minimal)
+#
+# Minimal training set for debugging
+# - Use historical data from test counties only
+# - No sampling limits for smoke test
+
+version: "train_smoke"
+description: "Minimal smoke test - historical data from test counties only"
+
+# Data sources
+data_sources:
+  # Historical data from test counties (the other half of temporal split)
+  test_counties_historical:
+    enabled: true
+    fraction: 1.0         # Use all available historical data from test counties
+
+  # External counties (not in test set)
+  external_counties:
+    enabled: false        # Disabled for smoke test
+
+# Sampling configuration
+sampling:
+  max_samples: null       # null = use all available (no limit for tiny counties)
+  strategy: "none"        # No additional sampling
+
+# Output options
+output:
+  save_train_statistics: true
+  save_county_distribution: true

@@ -1,0 +1,34 @@
+# Test Set: Smoke Test (Minimal)
+#
+# Minimal test set for debugging and validation
+# - Only 2 tiny counties
+# - Ensures fast loading and processing
+
+version: "test_smoke"
+description: "Minimal smoke test - 2 tiny counties for debugging"
+
+# County selection strategy
+county_selection:
+  strategy: "size_stratified"
+
+  # Minimal size buckets - only tiny counties
+  size_buckets:
+    - name: "tiny"
+      min_rows: 2
+      max_rows: 100
+      n_counties: 10       # Just 2 counties for quick testing
+
+  # Random seed for county selection (ensures reproducibility)
+  random_seed: 42
+
+# Temporal split within each test county
+temporal_split:
+  enabled: true
+  method: "percentile"
+  test_percentile: 50     # Top 50% by date = test, bottom 50% = train pool
+
+# Output options
+output:
+  save_test_county_list: true
+  save_split_statistics: true
+  save_per_county_info: true

@@ -1,0 +1,118 @@
+# Cross-county experiment configuration (v2)
+#
+# Uses pre-cleaned pooled data with per-split Phase 2 preprocessing.
+# This avoids data leakage by fitting normalization/winsorization on train only.
+
+# ==============================================================================
+# EXPERIMENT METADATA
+# ==============================================================================
+experiment:
+  type: "cross_county"
+  name: "cross_county_v2"
+  description: "Cross-county generalization with proper preprocessing (no leakage)"
+  repetitions: 10
+  random_seed: 42
+  n_jobs: 4
+
+# ==============================================================================
+# DATA
+# ==============================================================================
+# Points to pre-cleaned dataset (output of Phase 1 preprocessing)
+data:
+  cleaned_data_path: "/scratch/users/salilg/property_tax/preprocessed/cleaned_datasets/v1_no_onehot/"
+  target_column: "SALE_AMOUNT"
+
+# Optional: Restrict to specific counties (if not specified, uses all in cleaned data)
+# county_fips_list:
+#   - 1011
+#   - 1041
+#   - ...
+
+# ==============================================================================
+# PREPROCESSING (Phase 2)
+# ==============================================================================
+# Phase 2 preprocessing is applied per train/test split to avoid leakage.
+# These transformations are fit on training data and applied to both train and test.
+
+preprocessing:
+  phase2_steps:
+    # Winsorize continuous features at specified percentiles (fit on train only)
+    winsorize: true
+    winsorize_percentile: 1
+
+    # Standardize continuous features (fit on train only)
+    normalize_continuous: true
+
+    # Impute missing values (fit on train only)
+    impute_method: "median"  # Options: "median", "mean", "zero", "none"
+
+# ==============================================================================
+# SAMPLING (Optional)
+# ==============================================================================
+# Optional limits on train/test sizes per split
+sampling:
+  max_train_samples: null   # null = use all
+  max_test_samples: null    # null = use all
+
+# ==============================================================================
+# EXPERIMENT PARAMETERS
+# ==============================================================================
+iterations: 10  # Number of iterations per target county
+
+# ==============================================================================
+# MODELS
+# ==============================================================================
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: true
+
+# XGBoost hyperparameter tuning
+xgboost:
+  optuna_trials: 50
+  optuna_cv_folds: 3
+  use_gpu: true
+
+# TabPFN configuration
+tabpfn:
+  version: "v2"  # Options: "v2", "v2.5"
+  device: "cuda"   # Options: "cuda", "cpu"
+
+# ==============================================================================
+# EVALUATION
+# ==============================================================================
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+# ==============================================================================
+# OUTPUT
+# ==============================================================================
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/cross_county/v2/"
+
+# ==============================================================================
+# LOGGING
+# ==============================================================================
+logging:
+  level: "INFO"
+  save_fold_level_results: true
+  log_hyperparameters: true
+
+# ==============================================================================
+# PREDICTIONS (Optional)
+# ==============================================================================
+predictions:
+  save_predictions: false
+  predictions_format: "parquet"
+
+# ==============================================================================
+# CALIBRATION (Optional)
+# ==============================================================================
+calibration:
+  enabled: false
+  quantiles: [0.1, 0.25, 0.5, 0.75, 0.9]
+  models: ["tabpfn"]

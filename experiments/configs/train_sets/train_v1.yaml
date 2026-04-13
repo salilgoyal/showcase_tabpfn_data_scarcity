@@ -1,0 +1,37 @@
+# Train Set v1: Historical data from test counties only
+#
+# Strategy:
+# - Use ONLY the historical (bottom 50% by date) data from test counties
+# - No external county data
+#
+# Research question:
+# - Can the model learn to generalize from a county's own historical data?
+# - Tests temporal generalization within counties
+#
+# Expected behavior:
+# - Should work well for large test counties with substantial history
+# - May struggle for tiny counties with limited data
+
+version: "train_v1"
+description: "Historical data from test counties only (bottom 50% temporal)"
+
+# Data sources
+data_sources:
+  # Historical data from test counties (the other half of temporal split)
+  test_counties_historical:
+    enabled: true
+    fraction: 1.0         # Use all available historical data from test counties
+
+  # External counties (not in test set)
+  external_counties:
+    enabled: false        # Disabled for this version
+
+# Sampling configuration
+sampling:
+  max_samples: 10000           # Cap at 10K for TabPFN compatibility
+  max_samples_per_county: 500  # Max samples from any single county
+
+# Output options
+output:
+  save_train_statistics: true
+  save_county_distribution: true

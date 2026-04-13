@@ -1,0 +1,71 @@
+# Experiment: Calibration analysis with full preprocessing
+# This config runs TabPFN with quantile predictions for calibration evaluation
+
+experiment:
+  name: "calibration_with_preprocessing"
+  description: "Calibration analysis with winsorization, log transform, normalization"
+
+# Calibration settings
+calibration:
+  enabled: true
+  quantiles: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  models: ["tabpfn"]  # Only TabPFN, no XGBoost
+
+preprocessing:
+  features:
+    property_chars: true
+    census_bg: false
+    census_tract: false
+    assessed_value: false
+    geographic: false
+    temporal: true
+
+  steps:
+    # Data cleaning
+    drop_null_labels: true
+    drop_single_value_cols: true
+    drop_mostly_null_cols: true
+    share_non_null: 0.5
+    drop_lowest_ratios: true
+    drop_repeat_sales: true
+
+    # Feature engineering
+    generate_temporal_features: true
+    one_hot_encode: true
+
+    # Outlier handling
+    winsorize: true
+    winsorize_percentile: 1
+
+    # Target transformation
+    log_transform_target: true
+
+    # Scaling
+    normalize_continuous: true
+    normalize_binary: false
+
+    # Imputation
+    impute_method: "median"
+    mice_iterations: 3
+
+# Models to evaluate (only TabPFN for calibration)
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: false
+
+# Logging
+logging:
+  level: "INFO"
+  save_fold_level_results: true
+  log_hyperparameters: true
+
+# Predictions storage
+predictions:
+  save_predictions: false
+  predictions_format: "parquet"
+
+# Output path (uses templating)
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/{experiment_type}/{experiment_name}/"

@@ -1,0 +1,24 @@
+================================================================================
+COUNTY FEATURE COVERAGE ANALYSIS
+================================================================================
+
+Total counties analyzed: 2850
+Total unique features: 143
+
+Feature Distribution by Coverage Tier:
+----------------------------------------
+  100%      :   143 features
+  90-99%    :     0 features
+  75-89%    :     0 features
+  50-74%    :     0 features
+  25-49%    :     0 features
+  <25%      :     0 features
+
+Features in ALL counties (100% coverage):
+----------------------------------------
+  Count: 143
+  (Too many to list - see feature_coverage.csv)
+
+Features in very FEW counties (<25% coverage):
+----------------------------------------
+  Count: 0

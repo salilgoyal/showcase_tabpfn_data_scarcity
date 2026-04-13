@@ -1,0 +1,41 @@
+# Train Set v4: Mixed (50% test-county history, 50% external)
+# Just 50K context for v2.5 instead of 10K for v2
+#
+# Strategy:
+# - Use 50% of training budget from test counties' historical data
+# - Use 50% of training budget from random external counties
+#
+# Research question:
+# - Does mixing county-specific history with cross-county data help?
+# - Balanced approach: leverage both temporal patterns and diversity
+#
+# Expected behavior:
+# - Should balance county-specific learning with general patterns
+# - May be more robust than v1 for small test counties
+
+version: "train_v4"
+description: "Mixed: 50% test-county history, 50% random external counties"
+
+# Data sources
+data_sources:
+  # Historical data from test counties
+  test_counties_historical:
+    enabled: true
+    fraction: 0.5         # Use 50% of budget for test county history
+
+  # External counties
+  external_counties:
+    enabled: true
+    sampling_strategy: "random"   # Random sample from all external counties
+    n_counties: null              # null = sample from all external counties
+    fraction: 0.5                 # 50% of budget for external data
+
+# Sampling configuration
+sampling:
+  max_samples: 50000           # Cap at 50K for TabPFNv2.5 compatibility
+  max_samples_per_county: 1000  # Max samples from any single county (for diversity)
+
+# Output options
+output:
+  save_train_statistics: true
+  save_county_distribution: true

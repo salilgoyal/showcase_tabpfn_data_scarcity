@@ -1,0 +1,3 @@
+fips,size_bucket,county_train_pool_size,county_test_size,requested_train_size,actual_train_size,seed,model,n_features,fit_time,pred_time,r2,mae,rmse,mape,mse,status,experiment_name,experiment_description
+48311,tiny,7,8,5,5,42,tabpfn,107,19.70071578025818,4.066274404525757,-0.140482914526594,22782.41100366944,22904.647488466697,20.256372846913038,524622876.57092375,success,per_county_scaling_tiny_small,Per-county learning curves for tiny and small counties
+48311,tiny,7,8,5,5,42,xgboost,107,106.31123638153076,0.006792783737182617,-0.07128329351554319,22147.54283960694,22198.89650985528,19.431629004781602,492791006.25526494,success,per_county_scaling_tiny_small,Per-county learning curves for tiny and small counties

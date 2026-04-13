@@ -1,0 +1,25 @@
+# Train Set v7: takes all available training data from test-set-counties, and no external county data.
+
+version: "train_v7"
+description: "Large-scale: 5M samples (50% test-county history, 50% external)"
+
+# Data sources
+data_sources:
+  # Historical data from test counties
+  test_counties_historical:
+    enabled: true
+    fraction: 1.0      # even if the training pool of the test counties has less data, it'll use all of it and then fill the rest from external counties.
+
+  # External counties
+  external_counties:
+    enabled: false
+
+# Sampling configuration
+sampling:
+  max_samples: 5000000           # Cap at 5M for large-scale fine-tuning (tho available amount may be less)
+  max_samples_per_county: 10000  # Max samples from any single county (for diversity)
+
+# Output options
+output:
+  save_train_statistics: true
+  save_county_distribution: true

@@ -1,0 +1,58 @@
+experiment:
+  type: geo_pooling
+  name: sweep_lora8_lr1e-4_ep100_s3_ratio80
+  description: 'Sweep: lora8_lr1e-4_ep100_s3, ratio80, random split seed 3'
+  random_seed: 42
+data:
+  cleaned_data_path: /scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/
+  target_column: SALE_AMOUNT
+  project_root: /home/users/salilg/tabpfn_data_scarcity
+splits:
+  test_set_dir: /scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/test_v4_rand_s3/
+geo_pooling:
+  centroids_csv: data/us_county_latlng.csv
+  max_k_neighbors: 40
+  max_distance_miles: null
+  neighbor_budget_ratio: 0.8
+  max_samples_per_neighbor: null
+  max_total_training_size: 10000
+  restrict_neighbors_to_same_size_bucket: false
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: median
+ratio_filter:
+  enabled: true
+  drop_bottom_percentile: 5
+  drop_top_percentile: 0
+  by_sale_year: true
+models:
+- name: tabpfn
+  enabled: false
+- name: xgboost
+  enabled: false
+- name: tabpfn_global_finetuned
+  enabled: true
+  checkpoint_dir: /scratch/users/salilg/property_tax/results/global_finetuning/v2_no_onehot/sweep/lora8_lr1e-4_ep100_s3/
+xgboost:
+  optuna_trials: 50
+  optuna_cv_folds: 3
+  use_gpu: true
+tabpfn:
+  version: v2
+  device: cuda
+checkpointing:
+  enabled: true
+  interval: 10
+  resume: true
+metrics:
+- r2
+- mae
+- rmse
+- mape
+output:
+  results_dir: /scratch/users/salilg/property_tax/results/geo_pooling/v2_no_onehot/sweep/lora8_lr1e-4_ep100_s3_ratio80/
+logging:
+  level: INFO

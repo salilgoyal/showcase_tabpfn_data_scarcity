@@ -1,0 +1,85 @@
+# Geographic Pooling with Globally Finetuned TabPFN (internal variant)
+#
+# Uses a pre-finetuned TabPFN model trained on test_v4 train pool data
+# (internal variant) as a drop-in replacement for zero-shot TabPFN.
+# The finetuned model uses in-context learning with county-specific
+# training data as context.
+#
+# Prerequisites:
+#   1. Run global finetuning first to create checkpoint:
+#      sbatch experiments/slurm/nlp/global_finetuning.sh \
+#        experiments/configs/global_finetuning/nlp/v2_no_onehot/internal_15k.yaml
+#   2. Then run this geo_pooling experiment:
+#      sbatch --array=0-3 experiments/slurm/nlp/geo_pooling.sh \
+#        experiments/configs/geo_pooling/nlp/v2_no_onehot/test_v4_k40_ratio80_droplowest5_global_finetuned_internal.yaml
+
+experiment:
+  type: "geo_pooling"
+  name: "test_v4_geo_k40_ratio80_droplowest5_global_finetuned_internal"
+  description: "Per-county geo pooling with globally finetuned TabPFN (internal 15K), k=40, ratio=0.8, drop lowest 5%, internal finetuning"
+  random_seed: 42
+
+data:
+  cleaned_data_path: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/"
+  target_column: "SALE_AMOUNT"
+  project_root: "/sailhome/salilg/tabpfn_data_scarcity"
+
+splits:
+  test_set_dir: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/"
+
+geo_pooling:
+  centroids_csv: "data/us_county_latlng.csv"
+  max_k_neighbors: 40
+  max_distance_miles: null
+  neighbor_budget_ratio: 0.8
+  max_samples_per_neighbor: null
+  max_total_training_size: 10000
+  restrict_neighbors_to_same_size_bucket: false
+
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+ratio_filter:
+  enabled: true
+  drop_bottom_percentile: 5
+  drop_top_percentile: 0
+  by_sale_year: true
+
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: true
+  - name: "tabpfn_global_finetuned"
+    enabled: true
+    checkpoint_dir: "/nlp/scr/salilg/property_tax/results/global_finetuning/v2_no_onehot/internal_15k/"
+
+xgboost:
+  optuna_trials: 50
+  optuna_cv_folds: 3
+  use_gpu: true
+
+tabpfn:
+  version: "v2"
+  device: "cuda"
+
+checkpointing:
+  enabled: true
+  interval: 10
+  resume: false
+
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+output:
+  results_dir: "/nlp/scr/salilg/property_tax/results/geo_pooling/v2_no_onehot/test_v4_geo_k40_ratio80_droplowest5_global_finetuned_internal/"
+
+logging:
+  level: "INFO"

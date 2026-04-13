@@ -1,0 +1,55 @@
+# Test Set v4_rand: Size-stratified counties with random split
+#
+# Same county selection as test_v4 (tiny/small/medium buckets, seed=42),
+# but uses random sampling instead of temporal split to assign test rows.
+#
+# Rationale: running this with 5 different --split_seed values (0-4) produces
+# 5 independent splits per county, allowing us to estimate variability due to
+# the choice of test set rather than the model or data size.
+#
+# Usage (one seed at a time):
+#   python experiments/scripts/generate_test_set.py \
+#       --config experiments/configs/test_sets/test_v4_rand.yaml \
+#       --data_path /scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/data.parquet \
+#       --output_dir experiments/splits/test_v4_rand_s0/ \
+#       --split_seed 0
+#
+# Repeat with --split_seed 1 --output_dir experiments/splits/test_v4_rand_s1/ etc.
+
+version: "test_v4_rand"
+description: "Size-stratified counties (tiny/small/medium), 20% random split (seed varies)"
+
+# County selection strategy — identical to test_v4
+county_selection:
+  strategy: "size_stratified"
+
+  size_buckets:
+    - name: "tiny"
+      min_rows: 2
+      max_rows: 50
+      n_counties: 77      # From 77 available
+
+    - name: "small"
+      min_rows: 50
+      max_rows: 100
+      n_counties: 49       # From 49 available
+
+    - name: "medium"
+      min_rows: 100
+      max_rows: 500
+      n_counties: 406      # From 406 available
+
+  # Fixed seed for county selection (same counties across all seeds)
+  random_seed: 42
+
+# Random split within each test county
+# split_seed is passed via --split_seed CLI arg (overrides this value)
+random_split:
+  enabled: true
+  test_fraction: 0.2
+
+# Output options
+output:
+  save_test_county_list: true
+  save_split_statistics: true
+  save_per_county_info: true

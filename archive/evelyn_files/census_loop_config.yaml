@@ -1,0 +1,65 @@
+paths:
+  
+  data_path: '/oak/stanford/groups/deho/proptax/clean/corelogic_census_2018_2023.csv'
+  
+  fips_path: '/oak/stanford/groups/deho/proptax/clean/shuffled_fips.csv'
+  
+  results_path: '/oak/stanford/groups/deho/proptax/models/census_loop_bg_only/results/census_loop_rf_bg_only_results.csv'
+
+  log_path: '/oak/stanford/groups/deho/proptax/models/census_loop_bg_only/logs'
+
+  sampler_path: '/oak/stanford/groups/deho/proptax/models/census_loop_bg_only/hyperparams/sampler.pkl'
+
+  params_path: '/oak/stanford/groups/deho/proptax/models/census_loop_bg_only/hyperparams/best_params.pkl'
+
+  trials_path: '/oak/stanford/groups/deho/proptax/models/census_loop_bg_only/hyperparams/trials.csv'
+
+model_params:
+
+  share_non_null: 0.5
+
+  random_state: 42
+
+  wins_pctile: 1
+
+  log_label: True
+
+  n_trials: 50
+
+  loss_func: mae_loss
+
+features:
+
+  continuous: ['CALCULATED_TOTAL_VALUE']
+
+  census: ['census_pct_children_bg',
+    'census_pct_senior_bg',
+    'census_med_age_bg',
+    'census_pct_married_hh_bg',
+    'census_pct_single_hh_bg',
+    'census_pct_high_school_bg',
+    'census_pct_college_bg',
+    'census_pct_graduate_bg',
+    'census_pct_poverty_bg',
+    'census_med_hh_inc_bg',
+    'census_med_per_cap_inc_bg',
+    'census_pct_snap_bg',
+    'census_unemp_rate_bg',
+    'census_med_yr_built_bg',
+    'census_pct_renter_occ_bg']
+
+  categorical: []
+
+  time: ['sale_month',
+    'sale_day_of_month',
+    'sale_day_of_year',
+    'sale_day_of_week',
+    'sale_day']
+
+  meta: ['meta_sfh', 'ASSESSED_YEAR', 'SALE_YEAR', 'CLIP', 'fips', 'tract', 'block_group', 'MARKET_TOTAL_VALUE', 'ASSESSED_TOTAL_VALUE', 'APPRAISED_TOTAL_VALUE', 'CALCULATED_TOTAL_VALUE', 'CALCULATED_TOTAL_VALUE_SOURCE_CODE', 'TOTAL_TAX_AMOUNT', 'NET_TAX_AMOUNT', 'latitude', 'longitude']
+
+  label: 'SALE_AMOUNT'
+
+  sale_date : 'sale_date'
+
+  binary : []

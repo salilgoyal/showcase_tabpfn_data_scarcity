@@ -1,0 +1,142 @@
+# Finetuning Experiment: test_v1 + train_v6
+#
+# Test: test_v1 (315 counties, stratified)
+# Train: train_v6 (5M samples from test-county history + external counties)
+#
+# Research question: How does XGBoost perform with massive training data?
+
+experiment:
+  type: "finetuning"
+  name: "test_v4_train_v7"
+  description: "XGBoost training on test_v4 + train_v7 (5M samples)"
+  random_seed: 42
+
+# ==============================================================================
+# DATA
+# ==============================================================================
+data:
+  cleaned_data_path: "/nlp/scr/salilg/property_tax/preprocessed/v1_no_onehot/"
+  target_column: "SALE_AMOUNT"
+
+# ==============================================================================
+# SPLITS (Pre-generated - RECOMMENDED)
+# ==============================================================================
+# Use pre-generated splits to avoid loading 50GB data.parquet
+splits:
+  test_set_dir: "/nlp/scr/salilg/property_tax/preprocessed/v1_no_onehot/test_v4/"
+  train_set_dir: "/nlp/scr/salilg/property_tax/preprocessed/v1_no_onehot/test_v4/train_v7/"
+
+# ==============================================================================
+# PREPROCESSING (Phase 2)
+# ==============================================================================
+# Applied per train/test split: fit on train, transform both
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+# ==============================================================================
+# MODELS
+# ==============================================================================
+models:
+  - name: "tabpfn"
+    enabled: false  # Disabled - XGBoost only for this experiment
+  - name: "xgboost"
+    enabled: true
+
+xgboost:
+  optuna_trials: 20
+  optuna_cv_folds: 3
+  use_gpu: true
+
+# TabPFN configuration (not used but kept for compatibility)
+tabpfn:
+  version: "v2"
+  device: "cuda"
+
+# ==============================================================================
+# TABPFN FINE-TUNING CONFIGURATION (v2 - Yandex approach)
+# ==============================================================================
+finetuning:
+  # Implementation: "v2" = Yandex-style direct finetuning (recommended)
+  implementation: "v2"
+
+  # Validation split
+  val_fraction: 0.2
+
+  # Learning rate (Yandex paper uses ~1.8e-4, we use 1e-4 as safe default)
+  learning_rate: 1e-4
+  n_lr_warmup_epochs: 0           # No warmup by default
+  weight_decay: 0.0
+
+  # Training settings (match Yandex defaults)
+  max_epochs: 100
+  batch_size: 1                   # Number of independent ICL tasks per step
+  epoch_size: 10                  # Steps per epoch (Yandex default)
+  seq_len_pred: 1024              # Query samples per step (Yandex default)
+  gradient_clip: 1.0              # Gradient norm clipping
+
+  # Early stopping (Yandex default)
+  patience: 16
+
+  # Finetuning mode
+  finetune_mode: "full"           # Full model finetuning
+  target_transform: null          # null, "power", or "quantile"
+  softmax_temperature: 0.9
+
+  # Mixed precision (bfloat16 on A100)
+  use_amp: true
+
+  # Evaluation
+  eval_batch_size: 4096
+
+  # Checkpoint
+  checkpoint_path: null           # Auto-download TabPFN v2 checkpoint
+# ==============================================================================
+# BASELINE
+# ==============================================================================
+# Baseline uses county assessments (CALCULATED_TOTAL_VALUE) adjusted by
+# per-county median ratio computed from all available data
+baseline:
+  enabled: true
+
+# ==============================================================================
+# EVALUATION
+# ==============================================================================
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+# Stratify results by test county size bucket
+evaluation:
+  stratify_by_size_bucket: true
+
+# ==============================================================================
+# OUTPUT
+# ==============================================================================
+output:
+  results_dir: "/nlp/scr/salilg/property_tax/results/finetuning/test_v4_train_v7/"
+  checkpoint_dir: "/nlp/scr/salilg/property_tax/checkpoints/finetuning/test_v4_train_v7/"
+
+# ==============================================================================
+# LOGGING
+# ==============================================================================
+logging:
+  level: "INFO"
+  save_split_info: true
+  save_per_county_results: true
+
+# ==============================================================================
+# PREDICTIONS & CALIBRATION
+# ==============================================================================
+predictions:
+  save_predictions: true
+  predictions_format: "parquet"
+
+calibration:
+  enabled: false
+  quantiles: [0.1, 0.25, 0.5, 0.75, 0.9]

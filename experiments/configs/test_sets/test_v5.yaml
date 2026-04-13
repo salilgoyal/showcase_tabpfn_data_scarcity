@@ -1,0 +1,68 @@
+# Test Set v5: Size-stratified counties with temporal split
+#
+# Strategy:
+# - Select counties across 5 size buckets to evaluate performance at different data scales
+# - Within each test county, use top 50% by date (most recent) as test data
+# - Remaining 50% (historical) goes into train pool for potential training use
+#
+# Based on actual distribution of 2667 counties:
+#   0-50:     77 counties
+#   50-100:   49 counties
+#   100-500:  406 counties
+#   500-1K:   406 counties
+#   1K-5K:    1043 counties
+#   5K-10K:   288 counties
+#   10K-50K:  329 counties
+#   50K-100K: 57 counties
+#   100K+:    12 counties
+
+version: "test_v5"
+description: "Size-stratified counties (5 buckets), 50% most recent sales as test"
+
+# County selection strategy
+county_selection:
+  strategy: "size_stratified"
+
+  # Size buckets with number of counties to select from each
+  # Total: 36 test counties
+  size_buckets:
+    - name: "tiny"
+      min_rows: 2
+      max_rows: 50
+      n_counties: 77      # From 77 available
+
+    - name: "small"
+      min_rows: 50
+      max_rows: 100
+      n_counties: 49       # From 49 available
+
+    - name: "medium"
+      min_rows: 100
+      max_rows: 500
+      n_counties: 406      # From 406 available
+
+    - name: "large"
+      min_rows: 500
+      max_rows: 1000
+      n_counties: 406       # From 617 available (5K-10K + 10K-50K)
+
+  # Random seed for county selection (ensures reproducibility)
+  random_seed: 42
+
+# Temporal split within each test county
+temporal_split:
+  enabled: true
+  method: "percentile"    # Use percentile cutoff per county
+  test_percentile: 20     # Top 50% by date = test, bottom 50% = train pool
+
+  # Alternative methods (not used):
+  # method: "date"
+  # test_date: "2020-01-01"  # Fixed cutoff date
+  # method: "fraction"
+  # test_fraction: 0.5       # Fixed fraction
+
+# Output options
+output:
+  save_test_county_list: true
+  save_split_statistics: true
+  save_per_county_info: true

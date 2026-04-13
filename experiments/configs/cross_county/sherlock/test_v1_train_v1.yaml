@@ -1,0 +1,96 @@
+# Cross-County Experiment: test_v1 + train_v1
+#
+# Test: Size-stratified counties (36 total), 50% most recent = test
+# Train: Historical data from test counties only (bottom 50%)
+#
+# Research question: Can models learn from a county's own history?
+
+experiment:
+  type: "cross_county"
+  name: "test_v1_train_v1"
+  description: "Size-stratified test, train on test-county history only"
+  random_seed: 42
+
+# ==============================================================================
+# DATA
+# ==============================================================================
+data:
+  cleaned_data_path: "/scratch/users/salilg/property_tax/preprocessed/v1_no_onehot/"
+  target_column: "SALE_AMOUNT"
+
+# ==============================================================================
+# SPLITS (Pre-generated - RECOMMENDED)
+# ==============================================================================
+# Use pre-generated splits to avoid loading 50GB data.parquet
+splits:
+  test_set_dir: "/scratch/users/salilg/property_tax/preprocessed/v1_no_onehot/test_v1/"
+  train_set_dir: "/scratch/users/salilg/property_tax/preprocessed/v1_no_onehot/test_v1/train_v1/"
+
+# Alternative: Generate splits on-the-fly (requires 50GB+ memory)
+# test_set_config: "experiments/configs/test_sets/test_v1.yaml"
+# train_set_config: "experiments/configs/train_sets/train_v2.yaml"
+
+# ==============================================================================
+# PREPROCESSING (Phase 2)
+# ==============================================================================
+# Applied per train/test split: fit on train, transform both
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+# ==============================================================================
+# MODELS
+# ==============================================================================
+models:
+  - name: "tabpfn"
+    enabled: true
+  - name: "xgboost"
+    enabled: true
+
+xgboost:
+  optuna_trials: 50
+  optuna_cv_folds: 3
+  use_gpu: true
+
+# TabPFN configuration
+tabpfn:
+  version: "v2"  # Options: "v2", "v2.5"
+  device: "cuda"   # Options: "cuda", "cpu"
+
+# ==============================================================================
+# BASELINE
+# ==============================================================================
+# Baseline uses county assessments (CALCULATED_TOTAL_VALUE) adjusted by
+# median ratio computed on training data
+baseline:
+  enabled: true  # Set to false to skip baseline comparison
+
+# ==============================================================================
+# EVALUATION
+# ==============================================================================
+metrics:
+  - r2
+  - mae
+  - rmse
+  - mape
+
+# Stratify results by test county size bucket
+evaluation:
+  stratify_by_size_bucket: true
+
+# ==============================================================================
+# OUTPUT
+# ==============================================================================
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/cross_county/test_v1_train_v1/"
+
+# ==============================================================================
+# LOGGING
+# ==============================================================================
+logging:
+  level: "INFO"
+  save_split_info: true
+  save_per_county_results: true

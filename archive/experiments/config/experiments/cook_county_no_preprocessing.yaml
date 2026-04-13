@@ -1,0 +1,68 @@
+# Experiment: Cook County with no preprocessing
+# This config uses property characteristics but skips winsorization, log transform, and normalization
+
+experiment:
+  name: "cook_county_no_preprocessing"
+  description: "Cook County raw features, no transformations (baseline)"
+
+data:
+  cook_county_csv: "cook_county_analysis/data/cook_county.csv"
+  target_column: "sale_price"
+
+preprocessing:
+  features:
+    property_chars: true
+    census_bg: false
+    census_tract: false
+    assessed_value: false
+    geographic: false
+    temporal: true
+
+  steps:
+    # Data cleaning (minimal)
+    drop_null_labels: true
+    drop_single_value_cols: true
+    drop_mostly_null_cols: true
+    share_non_null: 0.5
+    drop_lowest_ratios: true
+    drop_repeat_sales: true
+
+    # Feature engineering
+    generate_temporal_features: true
+    one_hot_encode: true
+
+    # NO outlier handling
+    winsorize: false
+    winsorize_percentile: 1
+
+    # NO target transformation
+    log_transform_target: false
+
+    # NO scaling
+    normalize_continuous: false
+    normalize_binary: false
+
+    # Simple imputation
+    impute_method: "median"
+    mice_iterations: 3
+
+# Models configuration
+models:
+  tabpfn:
+    enabled: true
+    device: "cuda"
+    
+  xgboost:
+    enabled: true
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    random_state: 42
+
+# Experiment parameters for cook county (subsampling approach)
+train_sizes: [25, 50, 75, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+seeds: [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900]
+
+# Output path (uses templating)
+output:
+  results_dir: "/scratch/users/salilg/property_tax/results/cook_county/{experiment_name}/"

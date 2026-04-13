@@ -1,0 +1,137 @@
+# Experiment Registry
+# Standard practice: Track all experiments with metadata in one place
+#
+# Each experiment should have:
+# - Unique ID (can be auto-generated timestamp or manually assigned)
+# - Description (what you're testing)
+# - Config (preprocessing, features, model settings)
+# - Results location
+# - Status (running/completed/failed)
+# - Notes (insights, next steps)
+
+experiments:
+  # ========================================================================
+  # EVELYN PREPROCESSING EXPERIMENTS
+  # ========================================================================
+  exp_001:
+    name: "evelyn-minimal-20seeds"
+    date: "2025-11-12"
+    description: "Evelyn's preprocessing with minimal features (21: assessed value + census)"
+    config:
+      preprocessing: "evelyn"
+      features: "minimal"  # CALCULATED_TOTAL_VALUE + census_*_bg + time vars
+      n_features: 21
+      seeds: 20
+      train_sizes: [100, 500, 1000, ..., 10000]
+      models: ["xgboost", "tabpfn"]
+    results_dir: "results/evelyn-nopropertychars-20-seeds/"
+    status: "completed"
+    key_findings:
+      - "MAE @1k: ~91k (43% improvement over original)"
+      - "MAE @10k: ~84k (69% improvement!)"
+      - "Log transform + winsorization was game-changer"
+
+  exp_002:
+    name: "evelyn-withpropertychars-20seeds"
+    date: "2025-11-12"
+    description: "Evelyn's preprocessing with property characteristics included"
+    config:
+      preprocessing: "evelyn"
+      features: "assessed + census + property_chars"
+      n_features: ~110
+      seeds: 20
+      train_sizes: [100, 500, 1000, ..., 10000]
+      models: ["xgboost", "tabpfn"]
+    results_dir: "results/evelyn-includepropertychars-20-seeds/"
+    status: "completed"
+    key_findings:
+      - "MAE @1k: ~87k (similar to minimal features)"
+      - "MAE @10k: ~79k (slightly better than minimal)"
+      - "Property chars add marginal value with assessed value"
+
+  # ========================================================================
+  # ORIGINAL PREPROCESSING EXPERIMENTS
+  # ========================================================================
+  exp_000:
+    name: "baseline-40seeds"
+    date: "2025-11-10"
+    description: "Baseline with original preprocessing (pre-temporal fix)"
+    config:
+      preprocessing: "original"
+      features: "all"
+      train_years: "2018-2021"
+      test_year: "2022"
+      seeds: 40
+    results_dir: "results/upto10ktrain-dropped-columns-40-seeds/"
+    status: "completed"
+    problems:
+      - "MAE increased from ~163k @1k to ~207k @10k"
+      - "Temporal overfitting: 35% price inflation 2018→2022"
+      - "Training pool: only 29% from 2021"
+
+  # ========================================================================
+  # PROPERTY-ONLY EXPERIMENTS (PLANNED)
+  # ========================================================================
+  exp_003:
+    name: "propertyonly-original-20seeds"
+    date: "2025-11-14"
+    description: "Property characteristics ONLY, no assessed value, no census"
+    config:
+      preprocessing: "original"
+      features: "property_chars_only"  # char_* + meta_sfh + temporal
+      n_features: ~110
+      excluded: ["CALCULATED_TOTAL_VALUE", "census_*", "lat/lon"]
+      seeds: 20
+      train_sizes: [100, 500, 1000, ..., 10000]
+      models: ["xgboost", "tabpfn"]
+    results_dir: "results/propertyonly-original-20seeds/"
+    status: "planned"
+    hypothesis: "Property chars alone may underperform without assessed value"
+
+  exp_004:
+    name: "propertyonly-evelyn-20seeds"
+    date: "2025-11-14"
+    description: "Property characteristics with Evelyn's preprocessing"
+    config:
+      preprocessing: "evelyn"
+      features: "property_chars_only"
+      n_features: ~110
+      excluded: ["CALCULATED_TOTAL_VALUE", "census_*"]
+      seeds: 20
+      models: ["xgboost", "tabpfn"]
+    results_dir: "results/propertyonly-evelyn-20seeds/"
+    status: "planned"
+    hypothesis: "Test if log transform helps property-only features"
+
+# ========================================================================
+# NAMING CONVENTION
+# ========================================================================
+# Standard format: <feature_set>-<preprocessing>-<n_seeds>seeds
+# Examples:
+#   - minimal-evelyn-20seeds
+#   - propertyonly-original-20seeds
+#   - fullfeatures-evelyn-20seeds
+#   - assessedonly-original-20seeds
+#
+# Feature sets:
+#   - minimal: assessed value + census + time (21 features)
+#   - propertyonly: char_* only (~110 features)
+#   - fullfeatures: everything (~131 features)
+#   - assessedonly: only CALCULATED_TOTAL_VALUE + time
+#
+# Preprocessing:
+#   - original: no log transform, no winsorization
+#   - evelyn: log + winsorize + normalize
+
+# ========================================================================
+# QUICK REFERENCE: What worked best?
+# ========================================================================
+# Best overall: exp_002 (evelyn-withpropertychars)
+#   - MAE @10k: ~79k
+#   - Preprocessing matters more than features
+#   - Log transform + winsorization = 71% improvement
+#
+# Feature importance ranking (with Evelyn preprocessing):
+#   1. CALCULATED_TOTAL_VALUE (critical)
+#   2. Census demographics (helpful)
+#   3. Property characteristics (marginal when assessed value present)

@@ -1,0 +1,69 @@
+# Global Finetuning: Internal variant (test_v4 train pool) — Sherlock
+# Sherlock version of NLP config — uses /scratch/users/salilg/ paths.
+#
+# Finetunes TabPFN v2 on 15K samples from the test_v4 train pool
+# (historical county data from test counties — no test leakage).
+# The resulting checkpoint can be used as a drop-in replacement for
+# zero-shot TabPFN in geo_pooling experiments.
+#
+# Usage:
+#   sbatch experiments/slurm/sherlock/global_finetuning.sh \
+#     experiments/configs/global_finetuning/sherlock/v2_no_onehot/internal_15k.yaml
+
+experiment:
+  type: "global_finetuning"
+  name: "global_ft_internal_15k"
+  description: "Global TabPFN finetuning on 15K samples from test_v4 train pool"
+  random_seed: 42
+
+data:
+  cleaned_data_path: "/scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/"
+  target_column: "SALE_AMOUNT"
+  project_root: "/home/users/salilg/tabpfn_data_scarcity"
+
+global_finetuning:
+  variant: "internal"
+  n_samples: 15000
+  sampling_strategy: "uniform"
+
+splits:
+  test_set_dir: "/scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/"
+
+preprocessing:
+  phase2_steps:
+    winsorize: true
+    winsorize_percentile: 1
+    normalize_continuous: true
+    impute_method: "median"
+
+ratio_filter:
+  enabled: true
+  drop_bottom_percentile: 5
+  drop_top_percentile: 0
+  by_sale_year: true
+
+finetuning:
+  learning_rate: 1e-4
+  weight_decay: 0.0
+  max_epochs: 100
+  patience: 16
+  epoch_size: 10
+  seq_len_pred: 1024
+  max_context_size: 10000
+  batch_size: 1
+  gradient_clip: 1.0
+  use_amp: true
+  finetune_mode: "full"
+  target_transform: null
+  checkpoint_path: null
+  softmax_temperature: 0.9
+  val_fraction: 0.2
+  eval_batch_size: 4096
+  device: "cuda"
+
+output:
+  checkpoint_dir: "/scratch/users/salilg/property_tax/results/global_finetuning/v2_no_onehot/internal_15k/"
+  results_dir: "/scratch/users/salilg/property_tax/results/global_finetuning/v2_no_onehot/internal_15k/"
+
+logging:
+  level: "INFO"
