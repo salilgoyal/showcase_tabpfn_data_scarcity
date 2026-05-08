@@ -113,7 +113,18 @@ class XGBoostModel(BaseModel):
             'tree_method': 'hist'
         }
 
-        # Try GPU if requested, with fallback to CPU
+        # Try GPU if requested, with fallback to CPU.
+        # GPU is only beneficial for large datasets; for small datasets the memory
+        # transfer overhead dominates and XGBoost's sklearn API triggers a slow DMatrix
+        # fallback on every CV prediction (150x per county) when input data is on CPU.
+        gpu_min_samples = 5000
+        if self.use_gpu and train_size < gpu_min_samples:
+            logger.debug(
+                f"Training size {train_size} < {gpu_min_samples}; using CPU for XGBoost "
+                f"(GPU overhead not worth it at this scale)"
+            )
+            self.use_gpu = False
+
         if self.use_gpu:
             try:
                 # Test if GPU is actually available for XGBoost
