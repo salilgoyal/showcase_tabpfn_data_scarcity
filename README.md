@@ -1,6 +1,6 @@
 # TabPFN Data Scarcity Experiments
 
-Compare TabPFN and XGBoost on property sale price prediction across US counties, with a focus on **data scarcity**: many counties have very few historical transactions. The central question is whether using data from geographically nearby counties improves predictions for small counties.
+Compare TabPFN and XGBoost on property sale price prediction across US counties, with a focus on **data scarcity**: many counties have very few historical transactions. The central question is whether using data from geographically nearby counties, and/or using tabular foundation models, improves predictions for small counties.
 
 **Models**:
 - **TabPFN** — transformer doing in-context learning (zero-shot or globally finetuned)
@@ -62,13 +62,13 @@ Phase 1 applies all transformations that don't depend on a train/test split, so 
 
 - Load all county CSVs
 - Drop null labels, single-value columns, mostly-null columns (< 50% coverage)
-- Drop suspicious transactions (lowest 5% of assessed-value-to-sale-price ratio)
+- Drop suspicious transactions (lowest 5% of assessed-value-to-sale-price ratio and top 1% [double check])
 - Drop repeat sales (keep only the most recent sale per parcel)
 - Generate temporal features from `sale_date` (year, month, day, day-of-week, days since 2000)
 - Label-encode categorical columns (no one-hot encoding)
 - Log-transform the target (`SALE_AMOUNT`)
 
-**Output** at `/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/`:
+**Output** at `/nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/`:
 ```
 v2_no_onehot/
 ├── data.parquet          # ~15 GB, all counties, cleaned
@@ -87,17 +87,17 @@ v2_no_onehot/
 ```bash
 python experiments/scripts/generate_test_set.py \
     --config experiments/configs/test_sets/test_v4.yaml \
-    --data_path /nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/data.parquet \
-    --output_dir /nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/
+    --data_path /nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/data.parquet \
+    --output_dir /nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/test_v4/
 ```
 
 This selects which counties are in the test set and how each county's data is split between training and test. The split is recorded as **row indices into data.parquet**, so it's reproducible without re-running.
 
-**County selection**: size-stratified sampling across five buckets (tiny: 2–100 rows, small: 100–500, medium: 500–2K, large: 2K–10K, xlarge: 10K+).
+**County selection**: size-stratified sampling across five buckets (tiny: 2–100 rows, small: 100–500, medium: 500–2K, large: 2K–10K, xlarge: 10K+). 
 
 **Within-county split** (for `test_v4`): temporal 80/20 — the oldest 80% of each county's transactions go into the training pool, the most recent 20% are held out as test. The training pool is NOT a fixed set of rows you train on — it's the universe of rows any experiment is allowed to sample from. Each experiment builds its own training set from this pool at runtime.
 
-**Output** at e.g. `/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/`:
+**Output** at e.g. `/nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/test_v4/`:
 ```
 test_v4/
 ├── test_indices.npy       # data.parquet row indices for test samples
@@ -136,6 +136,7 @@ All experiments share this pattern at runtime:
 - Median imputation: fill NaNs using train medians
 
 Additionally, a **ratio filter** (configured under `ratio_filter`) can drop suspicious rows where `MARKET_TOTAL_VALUE / exp(SALE_AMOUNT)` is in the bottom N% (computed within each sale year). This runs before Phase 2.
+[double chekc if this was done in phase 2 or phase 1 preprocessing]
 
 ---
 
@@ -151,7 +152,7 @@ Additionally, a **ratio filter** (configured under `ratio_filter`) can drop susp
 
 1. Take the county's own train pool data (all of it — no subsampling of own data)
 2. Find the k nearest neighbor counties by geographic centroid distance (using `data/us_county_latlng.csv`)
-3. Fill a "neighbor budget" (= `own_train_size × neighbor_budget_ratio`, capped at `max_total_training_size - own_train_size`) by sampling from neighbors closest-first
+3. Fill a "neighbor budget" (= `own_train_size × neighbor_budget_ratio`, capped at `max_total_training_size - own_train_size`) by sampling from neighbors closest-first. Typically set to be 80% of the target county's train split size. [NOTE: it'd probably be better if we did this for a few different budgets and showed that it doesn't matter etc.]
 4. Combine own data + neighbor data → apply Phase 2 → train models
 5. Evaluate on the county's held-out test set
 
@@ -214,7 +215,7 @@ Instead of zero-shot TabPFN (pure in-context learning), use a checkpoint produce
 models:
   - name: "tabpfn_global_finetuned"
     enabled: true
-    checkpoint_dir: "/nlp/scr/salilg/property_tax/results/global_finetuning/v2_no_onehot/internal_15k/"
+    checkpoint_dir: "/nlp/scr/salilg/showcase_property_tax/results/global_finetuning/v2_no_onehot/internal_15k/"
   - name: "xgboost"
     enabled: true
 ```
@@ -476,10 +477,10 @@ Hyperparameter tuning via Optuna (50 trials, 3-fold CV by default). CV folds are
 
 | Content | NLP cluster path | Sherlock path |
 |---------|-----------------|---------------|
-| Raw county CSVs | `/nlp/scr/salilg/property_tax/county_csvs/` | `/scratch/users/salilg/property_tax/county_csvs/` |
-| Preprocessed data | `/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/` | `/scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/` |
+| Raw county CSVs | `/nlp/scr/salilg/showcase_property_tax/county_csvs/` | `/scratch/users/salilg/property_tax/county_csvs/` |
+| Preprocessed data | `/nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/` | `/scratch/users/salilg/property_tax/preprocessed/v2_no_onehot/` |
 | Test set (test_v4) | `.../preprocessed/v2_no_onehot/test_v4/` | same pattern |
-| Results | `/nlp/scr/salilg/property_tax/results/` | `/scratch/users/salilg/property_tax/results/` |
+| Results | `/nlp/scr/salilg/showcase_property_tax/results/` | `/scratch/users/salilg/property_tax/results/` |
 
 Results are organized by experiment type and config name:
 ```

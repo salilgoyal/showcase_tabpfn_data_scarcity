@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
 
-from src.models import TabPFNModel, XGBoostModel, BaselineModel
+from src.models import TabPFNModel, TabICLModel, XGBoostModel, BaselineModel
 from src.evaluation import compute_metrics
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,20 @@ class BaseExperimentRunner(ABC):
             model = TabPFNModel(
                 device=tabpfn_config.get('device', 'cuda'),
                 version=tabpfn_config.get('version', 'v2'),  # Default to v2 for backward compatibility
+                random_state=self.config.get('experiment', {}).get('random_seed', 42)
+            )
+        elif model_name == 'tabpfn_v2.5':
+            tabpfn25_config = self.config.get('tabpfn_v2.5', {})
+            model = TabPFNModel(
+                device=tabpfn25_config.get('device', 'cuda'),
+                version='v2.5',
+                random_state=self.config.get('experiment', {}).get('random_seed', 42)
+            )
+        elif model_name == 'tabicl':
+            tabicl_config = self.config.get('tabicl', {})
+            model = TabICLModel(
+                device=tabicl_config.get('device', None),
+                n_estimators=tabicl_config.get('n_estimators', 8),
                 random_state=self.config.get('experiment', {}).get('random_seed', 42)
             )
         elif model_name == 'xgboost':

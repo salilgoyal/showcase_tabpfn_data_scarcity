@@ -9,12 +9,12 @@ experiment:
   random_seed: 42
 
 data:
-  cleaned_data_path: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/"
+  cleaned_data_path: "/nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/"
   target_column: "SALE_AMOUNT"
-  project_root: "/sailhome/salilg/tabpfn_data_scarcity"
+  project_root: "/sailhome/salilg/showcase_tabpfn_data_scarcity"
 
 splits:
-  test_set_dir: "/nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/test_v4_rand_s3/"
+  test_set_dir: "/nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/test_v4_rand_s3/"
 
 geo_pooling:
   centroids_csv: "data/us_county_latlng.csv"
@@ -65,7 +65,7 @@ metrics:
   - mape
 
 output:
-  results_dir: "/nlp/scr/salilg/property_tax/results/geo_pooling/v2_no_onehot/test_v4_rand_s3_geo_k40_nopooling_droplowest5/"
+  results_dir: "/nlp/scr/salilg/showcase_property_tax/results/geo_pooling/v2_no_onehot/test_v4_rand_s3_geo_k40_nopooling_droplowest5/"
 
 logging:
   level: "INFO"

@@ -9,7 +9,7 @@ scipy==1.16.2
 
 # Models
 xgboost==3.0.5
-tabpfn==2.2.1
+tabpfn==6.4.1
 tabpfn-common-utils==0.2.0
 # pfns==0.4.2
 

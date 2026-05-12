@@ -37,13 +37,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from experiments.experiment_types import (
-    DataScalingExperiment,
-    CrossCountyExperiment,
-    FinetuningExperiment,
-    PerCountyScalingExperiment,
     GeoPoolingExperiment,
     GlobalFinetuningExperiment,
-    # WithinCountyExperiment,  # TODO: Needs migration to CleanedDataLoader
+    SingleCountyScalingExperiment,
 )
 
 logger = logging.getLogger(__name__)
@@ -510,6 +506,37 @@ def run_global_finetuning(config: dict, args: argparse.Namespace):
     logger.info(f"All outputs saved to: {output_dir}")
 
 
+def run_single_county_scaling(config: dict, args: argparse.Namespace):
+    """
+    Run single-county data scaling experiment.
+
+    Trains models on varying training set sizes for a single county
+    to build learning curves comparing model performance under data scarcity.
+
+    Args:
+        config: Configuration dictionary
+        args: Command line arguments
+    """
+    experiment_type = 'single_county_scaling'
+    output_dir = handle_output_dir_templating(config, experiment_type)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    setup_logging(config, output_dir)
+
+    county_fips = config.get('single_county_scaling', {}).get('county_fips', 'N/A')
+    logger.info("=" * 80)
+    logger.info(f"Experiment Type: {experiment_type}")
+    logger.info(f"Config: {args.config}")
+    logger.info(f"County FIPS: {county_fips}")
+    logger.info("=" * 80)
+
+    # Run experiment
+    runner = SingleCountyScalingExperiment(config)
+    results_df, calibration_data, predictions_data = runner.run_experiment()
+
+    logger.info(f"All outputs saved to: {output_dir}")
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -529,7 +556,7 @@ def main():
         '--experiment_type',
         type=str,
         required=False,
-        choices=['data_scaling', 'within_county', 'cross_county', 'finetuning', 'per_county_scaling', 'geo_pooling', 'global_finetuning', 'in_context_pooling'],
+        choices=['data_scaling', 'within_county', 'cross_county', 'finetuning', 'per_county_scaling', 'geo_pooling', 'global_finetuning', 'in_context_pooling', 'single_county_scaling'],
         help='Type of experiment to run (optional - reads from config if not specified)'
     )
 
@@ -591,6 +618,23 @@ def main():
         help='Override output directory from config'
     )
 
+    # Model toggle override
+    parser.add_argument(
+        '--models',
+        type=str,
+        default=None,
+        help='Comma-separated model names to enable, overriding the config models section. '
+             'E.g., --models tabpfn,tabicl or --models tabpfn_v2.5,xgboost'
+    )
+
+    # Force overwrite
+    parser.add_argument(
+        '--overwrite_existing_results',
+        action='store_true',
+        default=False,
+        help='Ignore checkpoint and re-run all enabled models from scratch, overwriting existing results.'
+    )
+
     args = parser.parse_args()
 
     # Load configuration
@@ -618,6 +662,17 @@ def main():
     if args.output_dir:
         config['output']['results_dir'] = args.output_dir
 
+    # Override enabled models if specified
+    if args.models:
+        enabled_names = [m.strip() for m in args.models.split(',')]
+        config['models'] = [{'name': name, 'enabled': True} for name in enabled_names]
+        logger.info(f"Model override from --models flag: {enabled_names}")
+
+    # Override checkpoint resume if --overwrite_existing_results
+    if args.overwrite_existing_results:
+        config.setdefault('checkpointing', {})['resume'] = False
+        logger.info("--overwrite_existing_results: checkpoint resume disabled, will re-run from scratch")
+
     # Dispatch to appropriate experiment handler
     if experiment_type == 'data_scaling':
         run_data_scaling(config, args)
@@ -642,6 +697,9 @@ def main():
 
     elif experiment_type == 'global_finetuning':
         run_global_finetuning(config, args)
+
+    elif experiment_type == 'single_county_scaling':
+        run_single_county_scaling(config, args)
 
     elif experiment_type == 'in_context_pooling':
         raise NotImplementedError("in_context_pooling experiment type not yet implemented")

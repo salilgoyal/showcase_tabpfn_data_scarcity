@@ -12,21 +12,24 @@
 #   # Submit a single variant folder:
 #   bash experiments/scripts/submit_rand_splits_nlp.sh experiments/configs/geo_pooling/nlp/v2_no_onehot/test_v4_k40_nopooling_droplowest5_randsplits
 
-cd /sailhome/salilg/tabpfn_data_scarcity
+cd /sailhome/salilg/showcase_tabpfn_data_scarcity
 
 CONFIG_ROOT="experiments/configs/geo_pooling/nlp/v2_no_onehot"
 
-if [ -n "$1" ]; then
+# First positional arg is an optional folder override; remaining args (e.g. --models) are passed through
+if [ -n "$1" ] && [[ "$1" != --* ]]; then
     FOLDERS=("$1")
+    shift
 else
     FOLDERS=("$CONFIG_ROOT"/*_randsplits/)
 fi
+EXTRA_ARGS="$@"
 
 for FOLDER in "${FOLDERS[@]}"; do
     for CONFIG in "${FOLDER%/}"/*.yaml; do
         JOB_NAME=$(basename "$CONFIG" .yaml)
         echo "Submitting: $CONFIG (job name: $JOB_NAME)"
         N_CHUNKS=4 sbatch --job-name="$JOB_NAME" --array=0-3 \
-            experiments/slurm/nlp/geo_pooling.sh "$CONFIG"
+            experiments/slurm/nlp/geo_pooling.sh "$CONFIG" $EXTRA_ARGS
     done
 done

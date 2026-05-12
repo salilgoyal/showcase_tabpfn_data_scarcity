@@ -155,8 +155,8 @@ diagnostic = {
 ```bash
 # Compare zero-shot vs finetuned attention for a specific county
 python scripts/run_attention_diagnostic.py \
-  --data_path /nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/ \
-  --test_set_dir /nlp/scr/salilg/property_tax/preprocessed/v2_no_onehot/test_v4/ \
+  --data_path /nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/ \
+  --test_set_dir /nlp/scr/salilg/showcase_property_tax/preprocessed/v2_no_onehot/test_v4/ \
   --fips 6037 \
   --finetuned_checkpoint /nlp/scr/.../global_finetuned_external/ \
   --output_dir results/attention_diagnostic/

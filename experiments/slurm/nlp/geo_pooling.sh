@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=geo_pooling
-#SBATCH --output=logs/geo_pooling/nlp/%x/%A_%a.out
-#SBATCH --error=logs/geo_pooling/nlp/%x/%A_%a.err
+#SBATCH --output=/sailhome/salilg/showcase_tabpfn_data_scarcity/logs/geo_pooling/nlp/%x/%A_%a.out
+#SBATCH --error=/sailhome/salilg/showcase_tabpfn_data_scarcity/logs/geo_pooling/nlp/%x/%A_%a.err
 #SBATCH --time=12:00:00
 #SBATCH --account=nlp
 #SBATCH --partition=jag-standard
@@ -43,11 +43,12 @@
 # ============================================
 # NLP CLUSTER CONFIGURATION
 # ============================================
-export PROJECT_HOME="/sailhome/salilg/tabpfn_data_scarcity"
-export SCRATCH_DIR="/nlp/scr/salilg/property_tax"
+export PROJECT_HOME="/sailhome/salilg/showcase_tabpfn_data_scarcity"
+export SCRATCH_DIR="/nlp/scr/salilg/showcase_property_tax"
 
-# Experiment config (required first argument)
+# Experiment config (required first argument); any extra args (e.g. --models) are passed through
 EXPERIMENT_CONFIG="${1:-}"
+EXTRA_ARGS="${@:2}"
 
 if [ -z "$EXPERIMENT_CONFIG" ]; then
     echo "ERROR: Experiment config required as first argument"
@@ -62,11 +63,18 @@ source /nlp/scr/salilg/miniconda3/bin/activate tabpfn_env
 export PYTHONPATH="${PROJECT_HOME}:${PYTHONPATH}"
 
 # HuggingFace authentication
-if [ -f "$HOME/.cache/huggingface/token" ]; then
+# Use NLP local home (parent of PROJECT_HOME) rather than $HOME, which in SLURM
+# resolves to the AFS home and won't have the token saved by huggingface-cli login.
+NLP_HOME=$(dirname "$PROJECT_HOME")
+HF_TOKEN_FILE="$NLP_HOME/.cache/huggingface/token"
+if [ -f "$HF_TOKEN_FILE" ]; then
+    export HF_TOKEN=$(cat "$HF_TOKEN_FILE")
+    echo "HuggingFace token loaded from $HF_TOKEN_FILE"
+elif [ -f "$HOME/.cache/huggingface/token" ]; then
     export HF_TOKEN=$(cat "$HOME/.cache/huggingface/token")
-    echo "HuggingFace token loaded"
+    echo "HuggingFace token loaded from \$HOME cache"
 else
-    echo "Warning: HuggingFace token not found"
+    echo "Warning: HuggingFace token not found (checked $HF_TOKEN_FILE and \$HOME/.cache/huggingface/token)"
 fi
 
 # Create log directory
@@ -92,7 +100,7 @@ echo "Config file: $EXPERIMENT_CONFIG"
 cd "$PROJECT_HOME"
 
 # Build command
-CMD="python $RUNNER_SCRIPT --experiment_type geo_pooling --config $EXPERIMENT_CONFIG"
+CMD="python $RUNNER_SCRIPT --experiment_type geo_pooling --config $EXPERIMENT_CONFIG $EXTRA_ARGS"
 
 # Array job mode: pass chunk index and total number of chunks
 # SLURM_ARRAY_TASK_COUNT is set automatically by SLURM (= number of tasks in --array)

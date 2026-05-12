@@ -570,6 +570,15 @@ class GeoPoolingExperiment(BaseExperimentRunner):
         if checkpoint_csv.exists() and checkpoint_keys.exists():
             logger.info("Resuming from checkpoint...")
             results_df = pd.read_csv(checkpoint_csv)
+
+            # Deduplicate: keep last entry per (fips, model) to match completed_keys.
+            # Duplicates can accumulate from re-runs that loaded old checkpoint results.
+            n_before = len(results_df)
+            results_df = results_df.drop_duplicates(subset=['fips', 'model'], keep='last')
+            n_dropped = n_before - len(results_df)
+            if n_dropped > 0:
+                logger.warning(f"  Dropped {n_dropped} duplicate checkpoint rows")
+
             results = results_df.to_dict('records')
 
             with open(checkpoint_keys, 'rb') as f:
