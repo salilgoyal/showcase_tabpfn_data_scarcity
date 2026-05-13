@@ -1,0 +1,136 @@
+\appendix
+
+\section{Additional Methodological Details}\label{app:methods}
+
+\subsection{Excluded Feature Columns}\label{app:excluded_columns}
+
+The following columns are present in the preprocessed dataset but excluded from the feature set used during model training. These columns serve administrative, identification, or evaluation-only purposes:
+
+\begin{itemize}
+    \item \textbf{Identification columns:} \texttt{fips} (county FIPS code), \texttt{CLIP} (parcel identifier), \texttt{sale\_date}, \texttt{Unnamed:~0} (artifact from CSV serialization)
+    \item \textbf{Administrative columns:} \texttt{ASSESSED\_YEAR}, \texttt{CENSUS\_ID}, \texttt{PREVIOUS\_CLIP}, \texttt{OWNER\_TRANSFER\_COMPOSITE\_TRANSACTION\_ID}, \texttt{address}
+    \item \textbf{Tax-related columns:} \texttt{TOTAL\_TAX\_AMOUNT}, \texttt{NET\_TAX\_AMOUNT}, \texttt{TAX\_RATE\_AREA\_CODE}
+    \item \textbf{Geographic identifiers:} \texttt{tract}, \texttt{block\_group}, \texttt{tract\_id}, \texttt{block\_group\_id}
+    \item \textbf{Metadata columns:} \texttt{CALCULATED\_TOTAL\_VALUE\_SOURCE\_CODE}, \texttt{MULTI\_OR\_SPLIT\_PARCEL\_CODE}, \texttt{meta\_sfh}
+    \item \textbf{Evaluation-only column:} \texttt{CALCULATED\_TOTAL\_VALUE} (assessed total value; retained for baseline comparison but excluded from training features to avoid leakage)
+\end{itemize}
+
+\subsection{XGBoost Hyperparameter Search Space}\label{app:xgboost_hyperparams}
+
+Table~\ref{tab:xgboost_params} reports the Optuna hyperparameter search space for XGBoost. Two regimes are used depending on training set size.
+
+\begin{table}[ht]
+\centering
+\caption{XGBoost hyperparameter search space by training set size regime. All parameters use the Tree-structured Parzen Estimator (TPE) sampler. Parameters marked with $\dagger$ are sampled on a log scale.}
+\label{tab:xgboost_params}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Hyperparameter} & \textbf{Small ($n < 100$)} & \textbf{Standard ($n \geq 100$)} & \textbf{Type} \\
+\midrule
+\texttt{max\_depth}          & $[2, 5]$            & $[3, 9]$             & Integer \\
+\texttt{learning\_rate}$^\dagger$     & $[0.01, 0.3]$       & $[0.01, 0.3]$        & Float \\
+\texttt{n\_estimators}       & $[50, 500]$         & $[100, 1000]$        & Integer (step 50) \\
+\texttt{subsample}           & $[0.7, 1.0]$        & $[0.6, 1.0]$         & Float \\
+\texttt{colsample\_bytree}   & $[0.7, 1.0]$        & $[0.6, 1.0]$         & Float \\
+\texttt{min\_child\_weight}  & $[3, 10]$           & $[1, 10]$            & Integer \\
+\texttt{reg\_alpha}$^\dagger$         & $[0.01, 1.0]$       & $[10^{-8}, 1.0]$     & Float \\
+\texttt{reg\_lambda}$^\dagger$        & $[0.1, 10.0]$       & $[0.1, 10.0]$        & Float \\
+\texttt{gamma}$^\dagger$              & $[0.01, 2.0]$       & $[10^{-8}, 2.0]$     & Float \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All XGBoost models use the \texttt{reg:squarederror} objective function with histogram-based tree construction (\texttt{tree\_method='hist'}). GPU acceleration is used for training sets with 5,000 or more observations; smaller training sets use CPU to avoid GPU memory transfer overhead. Cross-validation folds are adjusted for very small datasets: 2-fold CV is used when $n < 30$, and no cross-validation (single fold) is used when fewer than 2 observations would be available per fold. The optimization uses the TPE sampler with a fixed random seed for reproducibility.
+
+In the geographic pooling experiment, XGBoost is tuned with 50 Optuna trials per county. In the single-county scaling experiment, this is reduced to 10 trials per training size--seed combination to manage the computational cost of running 440 trials.
+
+\subsection{TabPFN Implementation Details}\label{app:tabpfn_details}
+
+TabPFN operates via in-context learning: the full training set is passed as context alongside each test query, and the pre-trained transformer generates predictions in a single forward pass without any gradient updates. This fundamentally differs from conventional models that optimize parameters at training time.
+
+We use TabPFN version 2 with the following implementation choices:
+
+\begin{itemize}
+    \item \textbf{Context size.} The maximum context (training set) size is 10,000 observations. This constraint motivates the total training size cap in the geographic pooling experiment.
+    \item \textbf{Inference mode.} We use batched inference mode (\texttt{fit\_mode='batched'}) for efficient prediction. For large test sets, predictions are computed in batches of 1,000 to avoid memory constraints, with GPU cache cleared between batches.
+    \item \textbf{Pre-training limits.} We set \texttt{ignore\_pretraining\_limits=True} to allow the model to process datasets that exceed its default pre-training configuration boundaries (e.g., feature counts beyond the default limit).
+    \item \textbf{No hyperparameter tuning.} TabPFN uses the same pre-trained weights across all counties and training set sizes. No per-county or per-experiment tuning is performed.
+\end{itemize}
+
+\subsection{Transaction Quality Filtering}\label{app:ratio_filter}
+
+In addition to the ratio-based filtering applied during Phase~1 preprocessing (Section~\ref{sec:phase1}), experiments may apply an additional ratio filter at the experiment level. This filter computes the ratio of assessed market total value to the exponentiated log sale price ($\texttt{MARKET\_TOTAL\_VALUE} / \exp(\texttt{SALE\_AMOUNT})$) within each sale year and removes transactions below a specified percentile threshold.
+
+In our primary specifications, transactions in the bottom 5\% of this ratio distribution (per sale year) are dropped. This more aggressive filter (compared to the 1\% threshold in Phase~1) targets cases where the recorded sale price is disproportionately high relative to the assessed value---often indicative of data quality issues such as bundled transactions, non-arm's-length sales, or recording errors. The filter is applied to the training pool before model training; the test set composition remains fixed.
+
+\subsection{Geographic Distance Computation}\label{app:haversine}
+
+Geographic proximity between counties is computed using the haversine formula, which calculates the great-circle distance between two points on a sphere given their latitude and longitude coordinates. For counties $i$ and $j$ with centroids at $(\phi_i, \lambda_i)$ and $(\phi_j, \lambda_j)$ respectively, the distance in miles is:
+
+\begin{equation}
+    d_{ij} = 2R \arcsin\!\left(\sqrt{\sin^2\!\left(\frac{\Delta\phi}{2}\right) + \cos(\phi_i)\cos(\phi_j)\sin^2\!\left(\frac{\Delta\lambda}{2}\right)}\right)
+\end{equation}
+
+\noindent where $\Delta\phi = \phi_j - \phi_i$, $\Delta\lambda = \lambda_j - \lambda_i$, and $R = 3{,}958.8$ miles is the Earth's radius. County centroid coordinates are sourced from U.S.\ Census Bureau data.
+
+\subsection{Phase~2 Preprocessing Details}\label{app:phase2_details}
+
+Phase~2 preprocessing is applied independently for each experimental unit (i.e., each county in the geographic pooling experiment, or each training-size--seed combination in the single-county scaling experiment). The three transformations are applied in the following order:
+
+\begin{enumerate}
+    \item \textbf{Winsorization.} For each continuous feature and the target variable, the 1st and 99th percentile values are computed from the training data. Both training and test observations are then clipped to these bounds. This reduces the influence of extreme outliers without discarding observations entirely.
+
+    \item \textbf{Median imputation.} For any feature column containing missing values, the training set median is computed and used to fill missing values in both the training and test sets. For non-numeric columns (rare after Phase~1 encoding), the mode is used instead.
+
+    \item \textbf{Standardization.} Continuous features---defined as numeric columns with more than two unique values in the training data---are standardized using the training set mean and standard deviation via \texttt{sklearn.preprocessing.StandardScaler}. Binary features are left unscaled.
+\end{enumerate}
+
+This per-unit fitting procedure ensures that no information from the test set or from other counties' data leaks into the preprocessing transformations.
+
+\subsection{County Size Distribution}\label{app:county_sizes}
+
+Table~\ref{tab:county_sizes} summarizes the distribution of counties across size categories in the full dataset. The geographic pooling experiment focuses on tiny, small, and medium counties, which collectively represent the counties most affected by data scarcity.
+
+\begin{table}[ht]
+\centering
+\caption{Distribution of U.S.\ counties by transaction volume in the preprocessed dataset.}
+\label{tab:county_sizes}
+\begin{tabular}{lrc}
+\toprule
+\textbf{Size Category} & \textbf{Transaction Range} & \textbf{Number of Counties} \\
+\midrule
+Tiny       & 2--50        & 77 \\
+Small      & 50--100      & 49 \\
+Medium     & 100--500     & 406 \\
+Large (500--1K)  & 500--1,000   & 406 \\
+Large (1K--5K)   & 1,000--5,000  & 1,043 \\
+Large (5K--10K)  & 5,000--10,000 & 288 \\
+XLarge (10K--50K) & 10,000--50,000 & 329 \\
+XLarge (50K--100K) & 50,000--100,000 & 57 \\
+XLarge (100K+)   & 100,000+      & 12 \\
+\midrule
+\textbf{Total} &              & \textbf{2,667} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Single-County Scaling: Training Size Grid}\label{app:scaling_grid}
+
+The single-county scaling experiment evaluates model performance at the following 22 training set sizes: 25, 50, 75, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, and 10000. Finer granularity is used below 1,000 observations to better capture the region where data scarcity effects are most pronounced. Each training size is evaluated at 20 independent random seeds (0, 100, 200, \ldots, 1900), yielding 440 trials per model.
+
+\subsection{Geographic Pooling Configuration Variants}\label{app:geo_variants}
+
+We evaluate several variants of the geographic pooling design to assess sensitivity to key design choices:
+
+\begin{itemize}
+    \item \textbf{Neighbor budget ratio $\rho$:} We test $\rho \in \{0, 0.8, 1.5, 5.0\}$, where $\rho = 0$ corresponds to no pooling (county-only baseline) and higher values draw proportionally more neighbor data.
+    \item \textbf{Maximum neighbors $K$:} We test $K \in \{40, 1000\}$. Higher values expand the candidate pool to more distant counties.
+    \item \textbf{Ratio filter threshold:} We test dropping the bottom 2\%, 5\%, 10\%, and 15\% of the assessed-value-to-sale-price ratio to evaluate the effect of data quality filtering intensity.
+    \item \textbf{Random vs.\ temporal splits:} In addition to the primary temporal split, we evaluate five random train-test splits (seeds 0--4) to assess whether results are robust to the splitting strategy.
+\end{itemize}
+
+The total training size is capped at 10,000 observations across all configurations, reflecting the TabPFN context window constraint.
+
+\subsection{Reproducibility}\label{app:reproducibility}
+
+All experiments use fixed random seeds for county selection, train-test splitting, data sampling, and model initialization. XGBoost's Optuna optimization uses a fixed TPE sampler seed. The preprocessed dataset, test set indices, and train pool indices are saved to disk and reused across experimental configurations to ensure that all models are evaluated on identical data. Intermediate results are checkpointed to enable resumable execution, with only successfully completed trials persisted (failed trials are automatically retried on re-execution).

@@ -1,0 +1,115 @@
+\section{Methods}\label{sec:methods}
+
+We design two complementary experiments to evaluate the potential of in-context learning models---specifically TabPFN---for property sale price prediction in data-scarce settings. The first experiment, \emph{single-county scaling}, characterizes how model performance changes as a function of training set size within a single large county. The second experiment, \emph{geographic pooling}, tests whether augmenting a county's own training data with transactions from geographically proximate counties can improve predictions in small counties. Both experiments compare TabPFN against XGBoost, a widely used gradient-boosted tree method, across a range of evaluation metrics.
+
+\subsection{Data}\label{sec:data}
+
+Our dataset comprises residential property sale transactions pooled from county-level records across approximately 2,667 U.S.\ counties. Each transaction record includes the sale amount, property characteristics (e.g., lot size, building area, number of rooms), assessed values, and sale date information. The target variable is the natural logarithm of the sale price (\texttt{SALE\_AMOUNT}), which we predict at the transaction level.
+
+\subsubsection{Phase~1 Preprocessing}\label{sec:phase1}
+
+We apply a standardized preprocessing pipeline to the raw county-level data. The key steps are:
+
+\begin{enumerate}
+    \item \textbf{Missing data handling.} We drop columns with fewer than 50\% non-null values and remove columns with only a single unique value.
+
+    \item \textbf{Transaction quality filtering.} We compute the ratio of assessed market total value to the exponentiated sale amount ($\texttt{MARKET\_TOTAL\_VALUE} / \exp(\texttt{SALE\_AMOUNT})$) for each transaction, stratified by sale year. Transactions in the bottom 1\% and top 1\% of this ratio distribution are dropped to remove likely data entry errors and non-arm's-length transactions. We additionally drop repeat sales, retaining only the most recent transaction per parcel.
+
+    \item \textbf{Temporal feature engineering.} From each transaction's sale date, we derive the sale year, month, day of month, day of week, and a continuous measure of days elapsed since January~1, 2000.
+
+    \item \textbf{Categorical encoding.} Categorical variables are label-encoded (i.e., mapped to integer values). We do not apply one-hot encoding, as TabPFN handles categorical features natively and one-hot encoding substantially increases the feature dimension.
+
+    \item \textbf{Target transformation.} The sale amount is log-transformed to reduce skewness and stabilize variance.
+\end{enumerate}
+
+Administrative and identification columns (e.g., FIPS code, parcel identifier, address, tax amounts) are retained for indexing but excluded from the feature set used during model training. The full list of excluded columns is provided in Appendix~\ref{app:excluded_columns}.
+
+\subsubsection{Phase~2 Preprocessing}\label{sec:phase2}
+
+A second preprocessing phase is applied separately for each experimental configuration to prevent data leakage. All transformations in this phase are fit exclusively on the training data and then applied to both training and test sets:
+
+\begin{enumerate}
+    \item \textbf{Winsorization.} Continuous features and the target variable are clipped at the 1st and 99th percentiles of the training distribution.
+    \item \textbf{Imputation.} Missing values in numeric features are filled with the training set median.
+    \item \textbf{Standardization.} Continuous features (those with more than two unique values) are standardized to zero mean and unit variance using the training set moments.
+\end{enumerate}
+
+\subsection{Test Set Construction}\label{sec:test_set}
+
+To evaluate model performance across the spectrum of data availability, we construct a size-stratified test set spanning three county size categories:
+
+\begin{itemize}
+    \item \textbf{Tiny:} 2--50 transactions (all 77 eligible counties)
+    \item \textbf{Small:} 50--100 transactions (all 49 eligible counties)
+    \item \textbf{Medium:} 100--500 transactions (all 406 eligible counties)
+\end{itemize}
+
+Within each selected test county, we apply a temporal split: the most recent 20\% of transactions (by sale date) are held out as the test set, and the remaining 80\% constitute the training pool. This temporal ordering ensures that models are evaluated on their ability to predict future sale prices given historical data, mirroring realistic deployment conditions. County selection and split generation use a fixed random seed for reproducibility.
+
+\subsection{Experiment~1: Single-County Scaling}\label{sec:single_county_scaling}
+
+The single-county scaling experiment characterizes the relationship between training set size and predictive performance within a single county. We select Cook County, Illinois (FIPS 17031) as the target county due to its large transaction volume, which enables us to construct learning curves spanning a wide range of training set sizes.
+
+\subsubsection{Experimental Design}
+
+We apply a temporal split to Cook County's transactions: the oldest 80\% form the training pool and the most recent 20\% form a fixed test set. We then evaluate each model at 22 training set sizes: $n \in \{25, 50, 75, 100, 200, 300, \ldots, 1000, 2000, 3000, \ldots, 10000\}$. At each size, we draw $n$ transactions uniformly at random (without replacement) from the training pool. To account for sampling variability, we repeat each draw across 20 independent random seeds, yielding $22 \times 20 = 440$ trials per model.
+
+For each trial, Phase~2 preprocessing is fit fresh on the sampled training set before model training and evaluation. An additional ratio-based quality filter removes transactions in the bottom 5\% of the assessed-value-to-sale-price ratio (computed per sale year) prior to sampling.
+
+All trials are evaluated on the same held-out test set. This design isolates the effect of training set size from other sources of variation such as geographic heterogeneity.
+
+\subsection{Experiment~2: Geographic Pooling}\label{sec:geo_pooling}
+
+The geographic pooling experiment addresses the core data scarcity challenge: many U.S.\ counties have too few property transactions to train reliable models using local data alone. We test whether augmenting a county's own historical transactions with data from geographically nearby counties improves prediction accuracy.
+
+\subsubsection{Neighbor Selection}
+
+For each target county, we identify candidate neighbor counties using haversine (great-circle) distance between county centroids.\footnote{County centroid coordinates (latitude and longitude) are obtained from Census Bureau data.} We consider up to $K = 40$ nearest counties as candidates.
+
+\subsubsection{Budget Allocation and Sampling}
+
+The amount of neighbor data added to a target county's training set is controlled by a \emph{neighbor budget ratio} $\rho$. Given a target county with $n_{\text{own}}$ training transactions, the neighbor budget is $B = \rho \times n_{\text{own}}$, subject to the constraint that the total training set size (own plus neighbor data) does not exceed a maximum of 10,000 transactions.\footnote{This cap reflects the context window size of TabPFN, which processes the full training set as in-context examples during inference.}
+
+Neighbor data is sampled greedily by proximity: we first draw transactions from the nearest neighbor county until either its data or a share of the budget is exhausted, then proceed to the next-nearest county, and so on. All available transactions from a given neighbor county may be used before moving to the next. This greedy strategy prioritizes geographic similarity.
+
+In our primary specification, $\rho = 0.8$, meaning neighbor data contributes at most 44\% of the total training set ($0.8n_{\text{own}} / 1.8n_{\text{own}}$). We also evaluate configurations with $\rho \in \{0, 1.5, 5.0\}$ and with different neighbor pool sizes ($K \in \{40, 1000\}$) to characterize the sensitivity of results to these parameters. The no-pooling baseline ($\rho = 0$) trains each county's model using only its own historical data.
+
+\subsubsection{Per-County Model Training}
+
+For each target county, we:
+\begin{enumerate}
+    \item Load all of the county's own historical training data (the 80\% from the temporal split).
+    \item Optionally apply a ratio-based quality filter, removing transactions in the bottom 5\% of the assessed-value-to-sale-price ratio within each sale year.
+    \item Sample neighbor data according to the budget allocation procedure above.
+    \item Combine own and neighbor data into a single training set.
+    \item Fit Phase~2 preprocessing on this combined training set.
+    \item Train each model (TabPFN, XGBoost) on the preprocessed training data.
+    \item Evaluate on the county's held-out test set (the most recent 20\% of transactions).
+\end{enumerate}
+
+This procedure is repeated independently for every county in the test set, with separate Phase~2 preprocessing for each to prevent information leakage across counties.
+
+\subsection{Models}\label{sec:models}
+
+\subsubsection{TabPFN}
+
+TabPFN (Tabular Prior-Data Fitted Network) is a transformer-based model that performs in-context learning for tabular prediction tasks \citep{hollmann2023tabpfn}. Unlike conventional machine learning models that optimize parameters on the training set, TabPFN treats the training data as context: the entire training set is provided as input alongside the test query, and predictions are generated in a single forward pass through a pre-trained transformer. The model requires no hyperparameter tuning and no gradient-based training at inference time.
+
+We use TabPFN version 2 with the default pre-trained weights. The model processes the full training set as context, subject to a maximum context size of 10,000 rows. No hyperparameters are tuned for TabPFN---the same pre-trained model is applied across all counties and training set sizes.
+
+\subsubsection{XGBoost}
+
+We use XGBoost \citep{chen2016xgboost} with Optuna-based Bayesian hyperparameter optimization \citep{akiba2019optuna} as a conventional baseline. For each county or training set configuration, we run 50 Optuna trials (reduced to 10 in the single-county scaling experiment for computational efficiency) using the Tree-structured Parzen Estimator (TPE) sampler. The objective is to minimize mean absolute error (MAE) under $k$-fold cross-validation, where $k = 3$ by default (reduced to 2 folds when the training set has fewer than 30 observations, and to 1 fold when fewer than 2 observations are available per fold).
+
+The hyperparameter search space is adapted to training set size. For small datasets ($n < 100$), the search is constrained to lower model complexity (e.g., maximum tree depth of 2--5, higher minimum child weight) to reduce overfitting risk. For larger datasets, the full search space is used. Complete hyperparameter ranges are provided in Appendix~\ref{app:xgboost_hyperparams}.
+
+\subsection{Evaluation Metrics}\label{sec:metrics}
+
+All metrics are computed on the original dollar scale by exponentiating the log-transformed predictions and true values. We report:
+
+\begin{itemize}
+    \item \textbf{$R^2$} (coefficient of determination): measures the proportion of variance in sale prices explained by the model.
+    \item \textbf{MAE} (mean absolute error): the average absolute prediction error in dollars.
+    \item \textbf{RMSE} (root mean squared error): the square root of the average squared prediction error, which penalizes large errors more heavily.
+    \item \textbf{MAPE} (mean absolute percentage error): the average absolute error as a percentage of the true sale price, providing a scale-invariant measure of accuracy.
+\end{itemize}

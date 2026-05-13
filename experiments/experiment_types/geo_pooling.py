@@ -15,9 +15,8 @@ import pandas as pd
 import numpy as np
 import logging
 import time
-import pickle
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 
 from .base import BaseExperimentRunner, ExperimentMetadata
 from src.data import CleanedDataLoader
@@ -96,7 +95,6 @@ class GeoPoolingExperiment(BaseExperimentRunner):
         # Checkpointing
         checkpoint_config = config.get('checkpointing', {})
         self.checkpoint_enabled = checkpoint_config.get('enabled', True)
-        self.checkpoint_interval = checkpoint_config.get('interval', 10)
         self.checkpoint_resume = checkpoint_config.get('resume', False)
 
         # Ratio filter at load time (applied before index mapping)
@@ -556,50 +554,48 @@ class GeoPoolingExperiment(BaseExperimentRunner):
         )
         return X, y
 
-    def _load_checkpoint(self, results_dir: Path) -> Tuple[List[Dict], set]:
-        """Load checkpoint if available."""
-        results = []
-        completed_keys = set()
+    def _load_completed_fips(self, model_name: str, results_dir: Path) -> Set[int]:
+        """
+        Return the set of FIPS already completed for a model by reading its CSV.
 
-        if not self.checkpoint_resume or not self.checkpoint_enabled:
-            return results, completed_keys
+        Only successful and explicitly-skipped rows count as done; failed rows are
+        excluded so they will be retried on the next resume.
+        """
+        if not self.checkpoint_resume:
+            return set()
+        csv_path = results_dir / f'{model_name}.csv'
+        if not csv_path.exists():
+            return set()
+        df = pd.read_csv(csv_path)
+        done = df.loc[~df['status'].str.startswith('failed', na=False), 'fips']
+        completed = set(done.tolist())
+        logger.info(f"  {model_name}: {len(completed)} FIPS already done (from {csv_path.name})")
+        return completed
 
-        checkpoint_csv = results_dir / 'results_checkpoint.csv'
-        checkpoint_keys = results_dir / 'completed_keys.pkl'
+    def _write_result(self, result: Dict, results_dir: Path, wrote_header: Set[str]):
+        """
+        Append a single result row to that model's per-model CSV.
 
-        if checkpoint_csv.exists() and checkpoint_keys.exists():
-            logger.info("Resuming from checkpoint...")
-            results_df = pd.read_csv(checkpoint_csv)
-
-            # Deduplicate: keep last entry per (fips, model) to match completed_keys.
-            # Duplicates can accumulate from re-runs that loaded old checkpoint results.
-            n_before = len(results_df)
-            results_df = results_df.drop_duplicates(subset=['fips', 'model'], keep='last')
-            n_dropped = n_before - len(results_df)
-            if n_dropped > 0:
-                logger.warning(f"  Dropped {n_dropped} duplicate checkpoint rows")
-
-            results = results_df.to_dict('records')
-
-            with open(checkpoint_keys, 'rb') as f:
-                completed_keys = pickle.load(f)
-
-            logger.info(f"  Loaded {len(results)} results, {len(completed_keys)} completed keys")
-
-        return results, completed_keys
-
-    def _save_checkpoint(self, results: List[Dict], completed_keys: set, results_dir: Path):
-        """Save checkpoint to disk."""
-        if not self.checkpoint_enabled or len(results) == 0:
+        On the first write for a model in this run:
+          - resume=True  → append to existing file (no header)
+          - resume=False → overwrite with header
+        Subsequent writes in the same run always append without header.
+        """
+        if not self.checkpoint_enabled:
             return
+        model_name = result['model']
+        csv_path = results_dir / f'{model_name}.csv'
 
-        results_dir.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(results).to_csv(results_dir / 'results_checkpoint.csv', index=False)
+        if model_name not in wrote_header:
+            if self.checkpoint_resume and csv_path.exists():
+                mode, header = 'a', False
+            else:
+                mode, header = 'w', True
+            wrote_header.add(model_name)
+        else:
+            mode, header = 'a', False
 
-        with open(results_dir / 'completed_keys.pkl', 'wb') as f:
-            pickle.dump(completed_keys, f)
-
-        logger.debug(f"Checkpoint saved: {len(results)} results")
+        pd.DataFrame([result]).to_csv(csv_path, mode=mode, index=False, header=header)
 
     def run_experiment(self) -> Tuple[pd.DataFrame, Optional[List[Dict]], Optional[List[Dict]]]:
         """Run the geographic pooling experiment."""
@@ -652,12 +648,17 @@ class GeoPoolingExperiment(BaseExperimentRunner):
             results_dir = results_dir / f"chunk_{self.county_index}"
         results_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load checkpoint
-        all_results, completed_keys = self._load_checkpoint(results_dir)
-
         # Get enabled models
         enabled_models = self.get_enabled_models()
         seed = self.config.get('experiment', {}).get('random_seed', 42)
+
+        # Load completed FIPS per model from per-model CSV checkpoints
+        if self.checkpoint_resume:
+            logger.info("Resuming from per-model CSV checkpoints...")
+        completed_fips_per_model: Dict[str, Set[int]] = {
+            m: self._load_completed_fips(m, results_dir) for m in enabled_models
+        }
+        wrote_header: Set[str] = set()  # tracks which model CSVs we've opened this run
 
         # Log geo pooling config
         logger.info(f"Geo pooling config:")
@@ -675,7 +676,6 @@ class GeoPoolingExperiment(BaseExperimentRunner):
         logger.info("=" * 80)
 
         start_time = time.time()
-        counties_since_checkpoint = 0
         all_prediction_frames = []
         all_neighbor_usage = []
 
@@ -713,27 +713,26 @@ class GeoPoolingExperiment(BaseExperimentRunner):
             if len(train_indices) < 2:
                 logger.warning(f"  Skipping FIPS={fips}: only {len(train_indices)} training sample(s), need at least 2")
                 for model_name in enabled_models:
-                    key = (fips, model_name)
-                    if key not in completed_keys:
-                        result = {
-                            'fips': fips,
-                            'size_bucket': cdata['size_bucket'],
-                            'model': model_name,
-                            'own_train_size': len(own_pool),
-                            'neighbor_train_size': len(neighbor_indices),
-                            'total_train_size': len(train_indices),
-                            'test_size': len(cdata['test_indices']),
-                            'n_features': 0,
-                            'fit_time': 0,
-                            'pred_time': 0,
-                            'r2': np.nan, 'mae': np.nan, 'rmse': np.nan,
-                            'mape': np.nan, 'mse': np.nan,
-                            'status': 'skipped: training set too small',
-                        }
-                        result = self.metadata.add_to_result(result)
-                        all_results.append(result)
-                        completed_keys.add(key)
-                counties_since_checkpoint += 1
+                    if fips in completed_fips_per_model[model_name]:
+                        continue
+                    result = {
+                        'fips': fips,
+                        'size_bucket': cdata['size_bucket'],
+                        'model': model_name,
+                        'own_train_size': len(own_pool),
+                        'neighbor_train_size': len(neighbor_indices),
+                        'total_train_size': len(train_indices),
+                        'test_size': len(cdata['test_indices']),
+                        'n_features': 0,
+                        'fit_time': 0,
+                        'pred_time': 0,
+                        'r2': np.nan, 'mae': np.nan, 'rmse': np.nan,
+                        'mape': np.nan, 'mse': np.nan,
+                        'status': 'skipped: training set too small',
+                    }
+                    result = self.metadata.add_to_result(result)
+                    self._write_result(result, results_dir, wrote_header)
+                    completed_fips_per_model[model_name].add(fips)
                 continue
 
             # Extract features (raw, before preprocessing)
@@ -755,8 +754,7 @@ class GeoPoolingExperiment(BaseExperimentRunner):
 
             # Train each model
             for model_name in enabled_models:
-                key = (fips, model_name)
-                if key in completed_keys:
+                if fips in completed_fips_per_model[model_name]:
                     logger.info(f"  {model_name}: already done (checkpoint)")
                     continue
 
@@ -782,8 +780,8 @@ class GeoPoolingExperiment(BaseExperimentRunner):
                         'status': f'skipped: train_size {len(X_train)} < min_finetune_size {self.min_finetune_size}',
                     }
                     result = self.metadata.add_to_result(result)
-                    all_results.append(result)
-                    completed_keys.add(key)
+                    self._write_result(result, results_dir, wrote_header)
+                    completed_fips_per_model[model_name].add(fips)
                     continue
 
                 try:
@@ -793,7 +791,6 @@ class GeoPoolingExperiment(BaseExperimentRunner):
                         # Pre-finetuned model: no fit(), pass training data as context.
                         # Features are per-county Phase 2 scaled (X_train, X_test), which
                         # matches the per-county x normalization done inside _fit_per_county().
-                        fit_start = time.time()
                         fit_time = 0.0  # no fitting needed
 
                         pred_start = time.time()
@@ -863,23 +860,24 @@ class GeoPoolingExperiment(BaseExperimentRunner):
                         'mse': np.nan,
                         'status': f'failed: {str(e)}',
                     }
-                    # Do NOT add to completed_keys — failures will be retried on resume
+                    # Do NOT add to completed_fips — failures will be retried on resume
                     result = self.metadata.add_to_result(result)
-                    all_results.append(result)
+                    self._write_result(result, results_dir, wrote_header)
                     continue
 
                 result = self.metadata.add_to_result(result)
-                all_results.append(result)
-                completed_keys.add(key)
+                self._write_result(result, results_dir, wrote_header)
+                completed_fips_per_model[model_name].add(fips)
 
-            counties_since_checkpoint += 1
-            if counties_since_checkpoint >= self.checkpoint_interval:
-                self._save_checkpoint(all_results, completed_keys, results_dir)
-                counties_since_checkpoint = 0
-
-        # Final save
-        results_df = pd.DataFrame(all_results) if all_results else pd.DataFrame()
-
+        # Combine all per-model CSVs into a single results.csv for notebook consumption.
+        # Any model CSV in the directory is included, even from previous runs, so that
+        # results.csv always reflects the full state of the experiment directory.
+        all_model_dfs = [
+            pd.read_csv(f)
+            for f in sorted(results_dir.glob('*.csv'))
+            if f.name != 'results.csv'
+        ]
+        results_df = pd.concat(all_model_dfs, ignore_index=True) if all_model_dfs else pd.DataFrame()
         if not results_df.empty:
             self.save_results(results_df, results_dir, 'results.csv')
 
@@ -898,16 +896,15 @@ class GeoPoolingExperiment(BaseExperimentRunner):
             usage_df.to_parquet(usage_path, index=False)
             logger.info(f"Neighbor usage saved to {usage_path} ({len(usage_df):,} rows)")
 
-        self._save_checkpoint(all_results, completed_keys, results_dir)
-
         total_time = time.time() - start_time
         logger.info("=" * 80)
         logger.info("EXPERIMENT COMPLETE")
         logger.info("=" * 80)
         logger.info(f"Total time: {total_time / 60:.2f} minutes")
-        logger.info(f"Total results: {len(all_results)}")
-        n_success = sum(1 for r in all_results if r.get('status') == 'success')
-        logger.info(f"Successful: {n_success}")
-        logger.info(f"Failed: {len(all_results) - n_success}")
+        if not results_df.empty:
+            n_success = (results_df['status'] == 'success').sum()
+            logger.info(f"Total results: {len(results_df)}")
+            logger.info(f"Successful: {n_success}")
+            logger.info(f"Failed/skipped: {len(results_df) - n_success}")
 
         return results_df, None, None

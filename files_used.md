@@ -98,3 +98,15 @@ Sweeps LoRA rank × LR × epoch size for globally finetuned TabPFN, run on Sherl
 ### SLURM job scripts
 - `experiments/slurm/sherlock/global_finetuning.sh` — runs a single global finetuning job
 - `experiments/slurm/sherlock/geo_pooling.sh` — runs a single geo pooling array job (shared with Experiment 1)
+
+---
+
+## Siloed Investigation
+
+Files created for the bad-rows impact investigation. Can be deleted if the investigation is abandoned.
+
+### Preprocessing config
+- `preprocessing/configs/v3_no_ratio_filter.yaml` — like v2_no_onehot but with `drop_lowest_ratios: false` and `drop_highest_ratios: false`; run on Sherlock to produce `/scratch/users/salilg/property_tax/preprocessed/v3_no_ratio_filter/data.parquet`
+
+### Notebook
+- `notebooks/investigations/bad_rows_impact.ipynb` — investigates how ratio-outlier rows affect TabPFN performance on Cook County; compares training on full vs. cleaned data
